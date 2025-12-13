@@ -10,14 +10,14 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
-    <!-- Tailwind CSS -->
+    <!-- Tailwind CSS - Note: Play CDN is for development. For production, use a pinned version with SRI -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Prism.js for code highlighting -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <!-- Prism.js for code highlighting - Note: Add SRI hashes for production -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" crossorigin="anonymous" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js" crossorigin="anonymous"></script>
 
     <style>
         #map {
@@ -294,6 +294,7 @@
         const API_BASE_URL = window.location.protocol === 'file:' ? 'http://127.0.0.1:5001' : '';
         let currentMarker = null;
         let restaurantLayers = [];
+        let restaurantMarkerMap = new Map(); // Map from restaurant ID to marker
         let selectedLat = null;
         let selectedLng = null;
         let requestLogs = [];
@@ -370,12 +371,17 @@
                 if (res.status === 401 || res.status === 403) {
                     statusEl.textContent = 'Token Status: Expired';
                     statusEl.className = 'status-badge status-error';
-                } else {
+                } else if (res.ok) {
                     statusEl.textContent = 'Token Status: Valid';
                     statusEl.className = 'status-badge status-success';
+                } else {
+                    statusEl.textContent = `Token Status: Unknown (${res.status})`;
+                    statusEl.className = 'status-badge status-warning';
                 }
             } catch (e) {
-                document.getElementById('token-status').textContent = 'Token Status: Unknown';
+                const statusEl = document.getElementById('token-status');
+                statusEl.textContent = 'Token Status: Unknown (network)';
+                statusEl.className = 'status-badge status-warning';
             }
         }
 
@@ -424,11 +430,15 @@
             const resultsDiv = document.getElementById('results');
             const loadingDiv = document.getElementById('loading');
 
-            resultsDiv.innerHTML = '';
+            // Clear previous results using DOM methods
+            while (resultsDiv.firstChild) {
+                resultsDiv.removeChild(resultsDiv.firstChild);
+            }
             loadingDiv.classList.remove('hidden');
 
             restaurantLayers.forEach(layer => map.removeLayer(layer));
             restaurantLayers = [];
+            restaurantMarkerMap.clear();
 
             const startTime = Date.now();
             try {
@@ -442,12 +452,20 @@
                 loadingDiv.classList.add('hidden');
 
                 if (res.status === 401 || res.status === 403) {
-                    resultsDiv.innerHTML = `
-                        <div class="bg-red-900 bg-opacity-30 border border-red-700 rounded p-4">
-                            <p class="font-bold text-red-400">Unauthorized (${res.status})</p>
-                            <p class="text-sm text-gray-400 mt-1">Tokens expired. Click "Refresh Tokens" above.</p>
-                        </div>
-                    `;
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'bg-red-900 bg-opacity-30 border border-red-700 rounded p-4';
+                    
+                    const title = document.createElement('p');
+                    title.className = 'font-bold text-red-400';
+                    title.textContent = `Unauthorized (${res.status})`;
+                    
+                    const msg = document.createElement('p');
+                    msg.className = 'text-sm text-gray-400 mt-1';
+                    msg.textContent = 'Tokens expired. Click "Refresh Tokens" above.';
+                    
+                    errorDiv.appendChild(title);
+                    errorDiv.appendChild(msg);
+                    resultsDiv.appendChild(errorDiv);
                     checkTokenStatus();
                     return;
                 }
@@ -457,7 +475,10 @@
                     document.getElementById('result-count').textContent = merchants.length;
                     
                     if (merchants.length === 0) {
-                        resultsDiv.innerHTML = '<p class="text-center text-gray-500 py-10">No restaurants found</p>';
+                        const emptyMsg = document.createElement('p');
+                        emptyMsg.className = 'text-center text-gray-500 py-10';
+                        emptyMsg.textContent = 'No restaurants found';
+                        resultsDiv.appendChild(emptyMsg);
                         return;
                     }
 
@@ -468,48 +489,101 @@
                         const price = m.price ? '$'.repeat(m.price) : '';
                         const isOpen = m.status === 'OPENED';
 
-                        const item = `
-                            <div class="bg-gray-800 border border-gray-700 rounded p-3 hover:border-green-500 transition cursor-pointer" onclick="highlightMarker('${m.id}')">
-                                <div class="flex justify-between items-start mb-2">
-                                    <h3 class="font-bold text-green-400">${m.name}</h3>
-                                    <div class="text-right text-xs">
-                                        <div class="status-badge ${isOpen ? 'status-success' : 'status-error'} mb-1">${isOpen ? 'OPEN' : 'CLOSED'}</div>
-                                        <div class="text-gray-400">${rating}</div>
-                                    </div>
-                                </div>
-                                <p class="text-sm text-gray-400 mb-2">${cuisine} ${price ? '• ' + price : ''}</p>
-                                <div class="flex justify-between items-center text-xs">
-                                    <span class="text-gray-500">${distance}</span>
-                                    <a href="${m.link}" target="_blank" class="text-blue-400 hover:text-blue-300">View Menu →</a>
-                                </div>
-                            </div>
-                        `;
-                        resultsDiv.innerHTML += item;
+                        // Create card using DOM construction to prevent XSS
+                        const card = document.createElement('div');
+                        card.className = 'bg-gray-800 border border-gray-700 rounded p-3 hover:border-green-500 transition cursor-pointer';
+                        card.addEventListener('click', () => highlightMarker(m.id));
 
-                        if (m.latitude && m.longitude) {
+                        const header = document.createElement('div');
+                        header.className = 'flex justify-between items-start mb-2';
+
+                        const title = document.createElement('h3');
+                        title.className = 'font-bold text-green-400';
+                        title.textContent = m.name ?? '(unknown)';
+
+                        const rightCol = document.createElement('div');
+                        rightCol.className = 'text-right text-xs';
+
+                        const statusBadge = document.createElement('div');
+                        statusBadge.className = `status-badge ${isOpen ? 'status-success' : 'status-error'} mb-1`;
+                        statusBadge.textContent = isOpen ? 'OPEN' : 'CLOSED';
+
+                        const ratingEl = document.createElement('div');
+                        ratingEl.className = 'text-gray-400';
+                        ratingEl.textContent = rating;
+
+                        rightCol.appendChild(statusBadge);
+                        rightCol.appendChild(ratingEl);
+                        header.appendChild(title);
+                        header.appendChild(rightCol);
+
+                        const cuisineEl = document.createElement('p');
+                        cuisineEl.className = 'text-sm text-gray-400 mb-2';
+                        cuisineEl.textContent = cuisine + (price ? ' • ' + price : '');
+
+                        const footer = document.createElement('div');
+                        footer.className = 'flex justify-between items-center text-xs';
+
+                        const distanceEl = document.createElement('span');
+                        distanceEl.className = 'text-gray-500';
+                        distanceEl.textContent = distance;
+
+                        const linkEl = document.createElement('a');
+                        linkEl.className = 'text-blue-400 hover:text-blue-300';
+                        linkEl.textContent = 'View Menu →';
+                        linkEl.target = '_blank';
+                        linkEl.rel = 'noopener noreferrer';
+                        if (typeof m.link === 'string' && m.link) {
+                            linkEl.href = m.link;
+                        } else {
+                            linkEl.href = '#';
+                            linkEl.onclick = (e) => e.preventDefault();
+                        }
+
+                        footer.appendChild(distanceEl);
+                        footer.appendChild(linkEl);
+
+                        card.appendChild(header);
+                        card.appendChild(cuisineEl);
+                        card.appendChild(footer);
+                        resultsDiv.appendChild(card);
+
+                        if (m.latitude && m.longitude && m.id) {
                             const marker = L.marker([m.latitude, m.longitude])
-                                .bindPopup(`<b>${m.name}</b><br>${rating} • ${price}<br>${distance}`);
-                            marker._id = m.id;
+                                .bindPopup(`<b>${escapeHtml(m.name ?? 'Unknown')}</b><br>${escapeHtml(rating)} • ${escapeHtml(price)}<br>${escapeHtml(distance)}`);
                             marker.addTo(map);
                             restaurantLayers.push(marker);
+                            restaurantMarkerMap.set(m.id, marker);
                         }
                     });
                 } else {
-                    resultsDiv.innerHTML = `<p class="text-red-400">Error: ${JSON.stringify(data)}</p>`;
+                    const errorEl = document.createElement('p');
+                    errorEl.className = 'text-red-400';
+                    errorEl.textContent = `Error: ${JSON.stringify(data)}`;
+                    resultsDiv.appendChild(errorEl);
                 }
             } catch (err) {
                 loadingDiv.classList.add('hidden');
                 addLog('GET', '/api/restaurants', 'ERROR', Date.now() - startTime, { error: err.message });
-                resultsDiv.innerHTML = `<p class="text-red-400">Error: ${err.message}</p>`;
+                const errorEl = document.createElement('p');
+                errorEl.className = 'text-red-400';
+                errorEl.textContent = `Error: ${err.message}`;
+                resultsDiv.appendChild(errorEl);
             }
         }
 
         function highlightMarker(id) {
-            const marker = restaurantLayers.find(m => m._id === id);
+            const marker = restaurantMarkerMap.get(id);
             if (marker) {
                 marker.openPopup();
                 map.panTo(marker.getLatLng());
             }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         function testAPI() {
@@ -546,7 +620,16 @@
                         body: JSON.stringify(params)
                     });
                 } else {
-                    const queryString = new URLSearchParams(params).toString();
+                    // Validate params are flat primitives for URLSearchParams
+                    const flatParams = {};
+                    for (const [key, value] of Object.entries(params)) {
+                        if (value !== null && typeof value !== 'object' && typeof value !== 'undefined') {
+                            flatParams[key] = String(value);
+                        } else {
+                            console.warn(`Skipping non-primitive param: ${key}`);
+                        }
+                    }
+                    const queryString = new URLSearchParams(flatParams).toString();
                     res = await fetch(`${API_BASE_URL}${endpoint}?${queryString}`);
                 }
                 
@@ -569,13 +652,14 @@
         }
 
         function addLog(method, endpoint, status, duration, data) {
+            const dataStr = JSON.stringify(data);
             const log = {
                 timestamp: new Date().toLocaleTimeString(),
                 method,
                 endpoint,
                 status,
                 duration: `${duration}ms`,
-                data: JSON.stringify(data).substring(0, 100) + '...'
+                data: dataStr.length > 100 ? dataStr.substring(0, 100) + '...' : dataStr
             };
             requestLogs.unshift(log);
             if (requestLogs.length > 50) requestLogs.pop();
@@ -584,23 +668,53 @@
 
         function updateLogsDisplay() {
             const logsDiv = document.getElementById('request-logs');
+            logsDiv.innerHTML = '';
+            
             if (requestLogs.length === 0) {
-                logsDiv.innerHTML = '<div class="text-center text-gray-500 py-10">No requests yet</div>';
+                const emptyMsg = document.createElement('div');
+                emptyMsg.className = 'text-center text-gray-500 py-10';
+                emptyMsg.textContent = 'No requests yet';
+                logsDiv.appendChild(emptyMsg);
                 return;
             }
             
-            logsDiv.innerHTML = requestLogs.map(log => `
-                <div class="bg-gray-800 border border-gray-700 rounded p-3 text-xs">
-                    <div class="flex justify-between items-center mb-1">
-                        <span class="font-mono text-green-400">${log.method} ${log.endpoint}</span>
-                        <span class="status-badge ${log.status === 200 ? 'status-success' : log.status === 'ERROR' ? 'status-error' : 'status-warning'}">${log.status}</span>
-                    </div>
-                    <div class="text-gray-400 text-xs">
-                        <span>${log.timestamp}</span> • <span>${log.duration}</span>
-                    </div>
-                    <pre class="mt-2 text-xs text-gray-500 overflow-x-auto">${log.data}</pre>
-                </div>
-            `).join('');
+            requestLogs.forEach(log => {
+                const logCard = document.createElement('div');
+                logCard.className = 'bg-gray-800 border border-gray-700 rounded p-3 text-xs mb-2';
+
+                const header = document.createElement('div');
+                header.className = 'flex justify-between items-center mb-1';
+
+                const methodEl = document.createElement('span');
+                methodEl.className = 'font-mono text-green-400';
+                methodEl.textContent = `${log.method} ${log.endpoint}`;
+
+                const statusEl = document.createElement('span');
+                let statusClass = 'status-warning';
+                if (log.status === 'ERROR') {
+                    statusClass = 'status-error';
+                } else if (typeof log.status === 'number' && log.status >= 200 && log.status < 300) {
+                    statusClass = 'status-success';
+                }
+                statusEl.className = `status-badge ${statusClass}`;
+                statusEl.textContent = log.status;
+
+                header.appendChild(methodEl);
+                header.appendChild(statusEl);
+
+                const meta = document.createElement('div');
+                meta.className = 'text-gray-400 text-xs';
+                meta.textContent = `${log.timestamp} • ${log.duration}`;
+
+                const dataPre = document.createElement('pre');
+                dataPre.className = 'mt-2 text-xs text-gray-500 overflow-x-auto';
+                dataPre.textContent = log.data;
+
+                logCard.appendChild(header);
+                logCard.appendChild(meta);
+                logCard.appendChild(dataPre);
+                logsDiv.appendChild(logCard);
+            });
         }
 
         function clearLogs() {

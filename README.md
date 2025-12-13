@@ -19,7 +19,7 @@ GrabFood **does not provide a public API** for developers. This makes it difficu
 ### Advanced Features
 - **Token Expiry Detection**: Automatically detects expired tokens and triggers refresh
 - **Intelligent Caching**: In-memory cache with configurable TTL (default: 5 minutes) to reduce API calls
-- **Rate Limiting**: Built-in rate limiting (500ms minimum interval) to prevent overwhelming servers
+- **Rate Limiting**: Built-in rate limiting with a minimum interval of 500 ms to prevent overwhelming servers
 - **User-Agent Rotation**: Random user agent selection to reduce detection risk
 - **Background Token Refresh**: Automatic token refresh every hour with error recovery
 - **Request Logging**: Track all API requests with timing and response data
@@ -108,7 +108,14 @@ curl -X POST "http://localhost:5001/api/refresh-token" \
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/yourusername/grabfood-api-wrapper.git
+   # Replace <your-org-or-username> with your GitHub username or organization
+   git clone https://github.com/<your-org-or-username>/grabfood-api-wrapper.git
+   cd grabfood-api-wrapper
+   ```
+   
+   Or using SSH:
+   ```bash
+   git clone git@github.com:<your-org-or-username>/grabfood-api-wrapper.git
    cd grabfood-api-wrapper
    ```
 
@@ -131,7 +138,7 @@ curl -X POST "http://localhost:5001/api/refresh-token" \
 python3 server.py
 ```
 
-The server starts on `http://127.0.0.1:5001` by default.
+The server starts on `http://127.0.0.1:5001` by default (development mode).
 
 ### Developer Interface
 
@@ -268,8 +275,13 @@ time.sleep(3600)  # 1 hour (default)
 
 ```bash
 docker build -t grabfood-api .
-docker run -p 5000:5000 grabfood-api
+# Development: map to port 5001 to match local dev server
+docker run -p 5001:5001 grabfood-api
+# Production: uses PORT env var (defaults to 5000)
+docker run -p 5000:5000 -e PORT=5000 grabfood-api
 ```
+
+**Note**: The Docker container defaults to port 5000 for production, while the local development server uses port 5001. Adjust port mappings as needed.
 
 ### Railway / Nixpacks
 
@@ -277,7 +289,7 @@ The project includes `nixpacks.toml` for Railway deployment. Ensure Chrome depen
 
 ### Environment Variables
 
-- `PORT`: Server port (default: 5000 in production, 5001 in development)
+- `PORT`: Server port (default: 5001 for local development, 5000 for Docker/production)
 - `CHROME_BIN`: Path to Chrome/Chromium binary (auto-detected)
 - `CHROMEDRIVER_PATH`: Path to ChromeDriver (auto-detected)
 
