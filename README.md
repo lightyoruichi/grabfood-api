@@ -107,14 +107,14 @@ curl -X POST "http://localhost:5001/api/refresh-token" \
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/lightyoruichi/grabfood-api-wrapper.git
-   cd grabfood-api-wrapper
+   git clone https://github.com/lightyoruichi/grabfood-api.git
+   cd grabfood-api
    ```
    
    Or using SSH:
    ```bash
-   git clone git@github.com:lightyoruichi/grabfood-api-wrapper.git
-   cd grabfood-api-wrapper
+   git clone git@github.com:lightyoruichi/grabfood-api.git
+   cd grabfood-api
    ```
 
 2. **Install Dependencies**:
