@@ -83,7 +83,7 @@ class GrabFoodClient:
                             
                     logger.info("Loaded Authentication Context from grab_auth_context.json")
             except Exception as e:
-                logger.error(f"Failed to load auth context: {e}")
+                logger.exception(f"Failed to load auth context: {e}")
         
         return headers
     
@@ -96,7 +96,8 @@ class GrabFoodClient:
                 error_msg = str(error_data).lower()
                 if any(keyword in error_msg for keyword in ['token', 'unauthorized', 'forbidden', 'expired', 'invalid']):
                     return True
-            except:
+            except (json.JSONDecodeError, ValueError):
+                # Parse failure still indicates token expiry for 401/403
                 pass
             return True
         return False
@@ -112,7 +113,7 @@ class GrabFoodClient:
                 logger.info("Tokens refreshed successfully")
                 return True
             except Exception as e:
-                logger.error(f"Token refresh failed: {e}")
+                logger.exception(f"Token refresh failed: {e}")
                 return False
         return False
     
@@ -244,7 +245,7 @@ class GrabFoodClient:
             return result
             
         except Exception as e:
-            logger.error(f"API Error: {e}")
+            logger.exception(f"API Error: {e}")
             return []
 
 if __name__ == "__main__":

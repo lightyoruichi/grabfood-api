@@ -38,6 +38,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Expose port (Railway/Heroku will set PORT env var)
+# Note: server.py defaults to 5001 for local development (see server.py line 229)
+# but production uses PORT env var or defaults to 5000
 EXPOSE 5000
 
 # Use gunicorn for production

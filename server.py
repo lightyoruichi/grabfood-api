@@ -30,7 +30,7 @@ def refresh_tokens_callback():
             logger.warning("Background token refresh failed - no headers captured")
             return False
     except Exception as e:
-        logger.error(f"Background token refresh error: {e}")
+        logger.exception(f"Background token refresh error: {e}")
         return False
 
 client = GrabFoodClient(refresh_callback=refresh_tokens_callback)
@@ -38,6 +38,17 @@ client = GrabFoodClient(refresh_callback=refresh_tokens_callback)
 # Background token refresh worker
 def token_refresh_worker():
     """Background thread to refresh tokens periodically"""
+    # Perform immediate refresh on startup
+    try:
+        logger.info("Performing initial token refresh on startup...")
+        refresh_tokens_callback()
+        # Reload client headers after refresh
+        client.headers = client._get_headers()
+        logger.info("Initial token refresh completed successfully")
+    except Exception as e:
+        logger.exception(f"Initial token refresh failed: {e}")
+    
+    # Enter hourly refresh loop
     while True:
         try:
             # Refresh every hour (3600 seconds)
@@ -47,7 +58,10 @@ def token_refresh_worker():
             # Reload client headers after refresh
             client.headers = client._get_headers()
         except Exception as e:
-            logger.error(f"Token refresh worker error: {e}")
+            logger.exception(f"Token refresh worker error: {e}")
+            # Use short retry delay on error (60 seconds) for quick recovery
+            logger.info("Retrying token refresh in 60 seconds...")
+            time.sleep(60)
 
 # Start background token refresh thread
 token_refresh_thread = threading.Thread(target=token_refresh_worker, daemon=True)
