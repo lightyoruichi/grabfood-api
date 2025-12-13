@@ -61,24 +61,43 @@ class GrabSeleniumService:
             chrome_bin = shutil.which("chromium") or shutil.which("google-chrome") or shutil.which("chromium-browser")
             
             # Fallback: Check /nix/store if not in PATH (Common in Nixpacks)
-            if not chrome_bin and os.path.exists("/nix/store"):
-                logger.info("Searching /nix/store for chromium...")
-                # Look for chromium executable in nix store
-                matches = glob.glob("/nix/store/*-chromium-*/bin/chromium")
-                if matches:
-                    chrome_bin = matches[0]
-                    logger.info(f"Found chromium in /nix/store: {chrome_bin}")
+            if not chrome_bin and os.path.exists("/nix"):
+                logger.info("Searching /nix for chromium...")
+                import subprocess
+                try:
+                    # Run find command to locate chromium binary
+                    result = subprocess.run(['find', '/nix', '-name', 'chromium', '-type', 'f'], capture_output=True, text=True)
+                    paths = result.stdout.strip().split('\n')
+                    # Filter for executable ones in a 'bin' directory if possible, or just take the first plausible one
+                    valid_paths = [p for p in paths if '/bin/' in p and os.access(p, os.X_OK)]
+                    
+                    if valid_paths:
+                        chrome_bin = valid_paths[0]
+                        logger.info(f"Found chromium via find: {chrome_bin}")
+                    else:
+                        logger.info(f"Find returned: {paths}")
+                except Exception as e:
+                    logger.error(f"Error running find: {e}")
 
         if not chromedriver_path:
             chromedriver_path = shutil.which("chromedriver") or shutil.which("chromium-driver")
             
             # Fallback: Check /nix/store
-            if not chromedriver_path and os.path.exists("/nix/store"):
-                logger.info("Searching /nix/store for chromedriver...")
-                matches = glob.glob("/nix/store/*-chromedriver-*/bin/chromedriver")
-                if matches:
-                    chromedriver_path = matches[0]
-                    logger.info(f"Found chromedriver in /nix/store: {chromedriver_path}")
+            if not chromedriver_path and os.path.exists("/nix"):
+                logger.info("Searching /nix for chromedriver...")
+                import subprocess
+                try:
+                    result = subprocess.run(['find', '/nix', '-name', 'chromedriver', '-type', 'f'], capture_output=True, text=True)
+                    paths = result.stdout.strip().split('\n')
+                    valid_paths = [p for p in paths if '/bin/' in p and os.access(p, os.X_OK)]
+                    
+                    if valid_paths:
+                        chromedriver_path = valid_paths[0]
+                        logger.info(f"Found chromedriver via find: {chromedriver_path}")
+                    else:
+                        logger.info(f"Find returned: {paths}")
+                except Exception as e:
+                    logger.error(f"Error running find: {e}")
 
         if chrome_bin:
             logger.info(f"Using Chrome Binary: {chrome_bin}")
