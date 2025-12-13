@@ -6,6 +6,7 @@ import time
 import json
 import logging
 import os
+import shutil
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,27 +48,42 @@ class GrabSeleniumService:
         chrome_bin = os.environ.get("CHROME_BIN")
         chromedriver_path = os.environ.get("CHROMEDRIVER_PATH")
 
-        if chrome_bin:
-            chrome_options.binary_location = chrome_bin
+        # Auto-detect system binaries if not explicitly set (Critical for Railway/Nixpacks)
+        if not chrome_bin:
+            chrome_bin = shutil.which("chromium") or shutil.which("google-chrome") or shutil.which("chromium-browser")
         
+        if not chromedriver_path:
+            chromedriver_path = shutil.which("chromedriver")
+
+        if chrome_bin:
+            logger.info(f"Using Chrome Binary: {chrome_bin}")
+            options.binary_location = chrome_bin
+        else:
+             logger.info("Chrome binary not found in PATH or env vars, relying on default.")
+        
+        # Additional safe options for container environments
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--headless=new") 
+
         # Wire interceptor options
         seleniumwire_options = {
             'disable_encoding': True,
-            'verify_ssl': False,  # Sometimes SSL verification failure causes drops
+            'verify_ssl': False,
             'connection_timeout': 10  # faster timeout
         }
 
         try:
             if chromedriver_path:
-                print(f"Using System Chromedriver: {chromedriver_path}")
+                logger.info(f"Using System Chromedriver: {chromedriver_path}")
                 service = Service(executable_path=chromedriver_path)
             else:
-                print("Using ChromeDriverManager")
+                logger.info("System Chromedriver not found. Falling back to ChromeDriverManager (may fail in containers).")
                 service = Service(ChromeDriverManager().install())
                 
             self.driver = webdriver.Chrome(
                 service=service, 
-                options=chrome_options,
+                options=options,
                 seleniumwire_options=seleniumwire_options
             )
         except Exception as e:

@@ -7,6 +7,4 @@ cmds = ["pip install -r requirements.txt"]
 [start]
 cmd = "gunicorn server:app --log-file -"
 
-[variables]
-CHROME_BIN = "/nix/store/*-chromium-*/bin/chromium"
-CHROMEDRIVER_PATH = "/nix/store/*-chromedriver-*/bin/chromedriver"
+
