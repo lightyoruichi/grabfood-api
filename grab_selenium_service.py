@@ -42,18 +42,36 @@ class GrabSeleniumService:
         chrome_options.add_argument("--disable-popup-blocking")
         chrome_options.add_argument("--lang=en-US")
         
-        # Simplified seleniumwire options - remove excludes for now to ensure we don't break dependency chains
+        # Environment variables for Railway/Production
+        chrome_bin = os.environ.get("CHROME_BIN")
+        chromedriver_path = os.environ.get("CHROMEDRIVER_PATH")
+
+        if chrome_bin:
+            chrome_options.binary_location = chrome_bin
+        
+        # Wire interceptor options
         seleniumwire_options = {
             'disable_encoding': True,
-            'verify_ssl': False  # Sometimes SSL verification failure causes drops
+            'verify_ssl': False,  # Sometimes SSL verification failure causes drops
+            'connection_timeout': 10  # faster timeout
         }
-        
-        service = Service(ChromeDriverManager().install())
-        self.driver = webdriver.Chrome(
-            service=service, 
-            options=chrome_options,
-            seleniumwire_options=seleniumwire_options
-        )
+
+        try:
+            if chromedriver_path:
+                print(f"Using System Chromedriver: {chromedriver_path}")
+                service = Service(executable_path=chromedriver_path)
+            else:
+                print("Using ChromeDriverManager")
+                service = Service(ChromeDriverManager().install())
+                
+            self.driver = webdriver.Chrome(
+                service=service, 
+                options=chrome_options,
+                seleniumwire_options=seleniumwire_options
+            )
+        except Exception as e:
+            logger.error(f"Failed to initialize WebDriver: {e}")
+            raise
 
         self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
             "source": """
