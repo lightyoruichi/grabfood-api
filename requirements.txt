@@ -1,0 +1,7 @@
+requests
+selenium
+selenium-wire
+webdriver-manager
+blinker==1.7.0
+flask
+flask-cors
