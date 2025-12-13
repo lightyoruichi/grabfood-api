@@ -4,82 +4,284 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GrabFood Location Picker</title>
+    <title>GrabFood API - Developer Interface</title>
 
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
-    <!-- Tailwind CSS for styling -->
+    <!-- Tailwind CSS - Note: Play CDN is for development. For production, use a pinned version with SRI -->
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Prism.js for code highlighting - Note: Add SRI hashes for production -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" crossorigin="anonymous" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js" crossorigin="anonymous"></script>
 
     <style>
         #map {
-            height: 600px;
+            height: 500px;
             width: 100%;
         }
 
         .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
+            border: 3px solid #1f2937;
+            border-top: 3px solid #10b981;
             border-radius: 50%;
             width: 20px;
             height: 20px;
-            animation: spin 2s linear infinite;
+            animation: spin 1s linear infinite;
         }
 
         @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
 
-            100% {
-                transform: rotate(360deg);
-            }
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+            overflow-x: auto;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .status-success { background: #10b98120; color: #10b981; }
+        .status-error { background: #ef444420; color: #ef4444; }
+        .status-warning { background: #f59e0b20; color: #f59e0b; }
+        .status-info { background: #3b82f620; color: #3b82f6; }
+
+        .tab-button {
+            padding: 0.5rem 1rem;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab-button.active {
+            border-bottom-color: #10b981;
+            color: #10b981;
+        }
+
+        pre[class*="language-"] {
+            margin: 0;
+            background: #1e1e1e !important;
         }
     </style>
 </head>
 
-<body class="bg-gray-100 h-screen flex flex-col">
-
-    <div class="bg-white shadow p-4 flex justify-between items-center z-10">
-        <h1 class="text-xl font-bold text-green-600">GrabFood Explorer</h1>
-
-        <!-- Search Bar -->
-        <div class="flex-1 mx-4">
-            <input type="text" id="search-input" placeholder="Search (e.g. Pizza, KFC)..."
-                class="w-full px-4 py-2 border rounded-full focus:outline-none focus:ring-2 focus:ring-green-500"
-                onkeypress="handleEnter(event)">
-        </div>
-
-        <div class="flex items-center space-x-4">
-            <span id="coords" class="text-sm text-gray-500">Pick a location on the map</span>
-            <button onclick="refreshTokens()" id="btn-refresh"
-                class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm">
-                Refresh Tokens (Selenium)
-            </button>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <!-- Header -->
+    <div class="bg-gray-800 border-b border-gray-700 px-6 py-4">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold text-green-400">GrabFood API</h1>
+                <p class="text-sm text-gray-400 mt-1">Developer Interface • Reverse Engineered • Not Official</p>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div id="token-status" class="status-badge status-warning">Token Status: Unknown</div>
+                <button onclick="refreshTokens()" id="btn-refresh"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded text-sm transition">
+                    🔄 Refresh Tokens
+                </button>
+            </div>
         </div>
     </div>
 
-    <div class="flex flex-1 overflow-hidden">
-        <!-- Sidebar -->
-        <div class="w-1/3 bg-white border-r overflow-y-auto p-4" id="sidebar">
-            <h2 class="font-semibold mb-4 text-lg">Restaurants Nearby</h2>
-            <div id="results" class="space-y-4">
-                <p class="text-gray-500 text-center mt-10">Select a location on the map to load restaurants.</p>
+    <div class="flex h-[calc(100vh-80px)]">
+        <!-- Left Panel: Map & Controls -->
+        <div class="w-1/2 border-r border-gray-700 flex flex-col">
+            <!-- Map Container -->
+            <div class="flex-1 relative bg-gray-800">
+                <div id="map" class="h-full"></div>
+                <div class="absolute top-4 left-4 bg-gray-900 bg-opacity-90 p-3 rounded-lg border border-gray-700">
+                    <div class="text-xs text-gray-400 mb-1">Coordinates</div>
+                    <div id="coords" class="text-sm font-mono text-green-400">Click map to select</div>
+                </div>
             </div>
-            <div id="loading" class="hidden flex justify-center mt-10">
-                <div class="loader"></div>
+
+            <!-- Controls -->
+            <div class="bg-gray-800 border-t border-gray-700 p-4">
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Search Keyword</label>
+                        <input type="text" id="search-input" placeholder="e.g., pizza, kfc, mcdonalds"
+                            class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                            onkeypress="handleEnter(event)">
+                    </div>
+                    <div class="flex space-x-2">
+                        <button onclick="searchHere()" id="btn-search"
+                            class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded text-sm transition disabled:opacity-50"
+                            disabled>
+                            🔍 Search Restaurants
+                        </button>
+                        <button onclick="testAPI()" id="btn-test-api"
+                            class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded text-sm transition">
+                            🧪 Test API
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Map -->
-        <div class="w-2/3 relative">
-            <div id="map" class="h-full"></div>
-            <button onclick="searchHere()" id="btn-search"
-                class="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-full shadow-lg z-[1000] hidden">
-                Search Here
-            </button>
+        <!-- Right Panel: Results & Dev Tools -->
+        <div class="w-1/2 flex flex-col overflow-hidden">
+            <!-- Tabs -->
+            <div class="bg-gray-800 border-b border-gray-700 flex">
+                <div class="tab-button active" onclick="switchTab('results')" data-tab="results">
+                    📋 Results (<span id="result-count">0</span>)
+                </div>
+                <div class="tab-button" onclick="switchTab('api')" data-tab="api">
+                    🔌 API Tester
+                </div>
+                <div class="tab-button" onclick="switchTab('docs')" data-tab="docs">
+                    📚 Documentation
+                </div>
+                <div class="tab-button" onclick="switchTab('logs')" data-tab="logs">
+                    📊 Request Logs
+                </div>
+            </div>
+
+            <!-- Tab Content -->
+            <div class="flex-1 overflow-y-auto bg-gray-900">
+                <!-- Results Tab -->
+                <div id="tab-results" class="tab-content p-4">
+                    <div id="results" class="space-y-3">
+                        <div class="text-center text-gray-500 py-10">
+                            <div class="text-4xl mb-2">📍</div>
+                            <p>Select a location on the map and click "Search Restaurants"</p>
+                        </div>
+                    </div>
+                    <div id="loading" class="hidden flex justify-center items-center py-10">
+                        <div class="text-center">
+                            <div class="loader mx-auto mb-3"></div>
+                            <p class="text-sm text-gray-400">Fetching restaurants...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- API Tester Tab -->
+                <div id="tab-api" class="tab-content p-4 hidden">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-semibold mb-2">Endpoint</label>
+                            <select id="api-endpoint" class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm">
+                                <option value="/api/restaurants">GET /api/restaurants</option>
+                                <option value="/api/refresh-token">POST /api/refresh-token</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-2">Parameters</label>
+                            <textarea id="api-params" rows="6" placeholder='{"lat": 3.140853, "lng": 101.693207, "keyword": "pizza"}'
+                                class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm font-mono"></textarea>
+                        </div>
+                        <button onclick="executeAPITest()" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded text-sm transition">
+                            ▶ Execute Request
+                        </button>
+                        <div id="api-response" class="hidden">
+                            <label class="block text-sm font-semibold mb-2">Response</label>
+                            <div class="bg-gray-800 border border-gray-700 rounded p-3">
+                                <div class="flex justify-between items-center mb-2">
+                                    <span id="api-status" class="status-badge"></span>
+                                    <span id="api-time" class="text-xs text-gray-400"></span>
+                                </div>
+                                <pre id="api-response-body" class="code-block text-xs overflow-x-auto"></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Documentation Tab -->
+                <div id="tab-docs" class="tab-content p-4 hidden">
+                    <div class="space-y-6">
+                        <div>
+                            <h3 class="text-lg font-bold mb-3">⚠️ Important Notice</h3>
+                            <div class="bg-yellow-900 bg-opacity-30 border border-yellow-700 rounded p-4 mb-4">
+                                <p class="text-sm"><strong>This is NOT an official GrabFood API.</strong> This project reverse-engineers GrabFood's web interface for educational purposes. Use responsibly and respect Grab's terms of service.</p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 class="text-lg font-bold mb-3">GET /api/restaurants</h3>
+                            <p class="text-sm text-gray-400 mb-3">Search for restaurants near a location</p>
+                            
+                            <div class="bg-gray-800 rounded p-3 mb-3">
+                                <div class="text-xs text-gray-400 mb-1">cURL Example</div>
+                                <pre class="code-block text-xs"><code class="language-bash">curl "http://localhost:5001/api/restaurants?lat=3.140853&lng=101.693207&keyword=pizza"</code></pre>
+                            </div>
+
+                            <div class="space-y-2 text-sm">
+                                <div><strong>Parameters:</strong></div>
+                                <ul class="list-disc list-inside text-gray-400 ml-4 space-y-1">
+                                    <li><code class="text-green-400">lat</code> (float, required): Latitude (-90 to 90)</li>
+                                    <li><code class="text-green-400">lng</code> (float, required): Longitude (-180 to 180)</li>
+                                    <li><code class="text-green-400">keyword</code> (string, optional): Search keyword. Default: "food"</li>
+                                    <li><code class="text-green-400">limit</code> (int, optional): Max results (1-100). Default: 32</li>
+                                    <li><code class="text-green-400">use_cache</code> (bool, optional): Use cached results. Default: true</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 class="text-lg font-bold mb-3">POST /api/refresh-token</h3>
+                            <p class="text-sm text-gray-400 mb-3">Refresh authentication tokens using Selenium</p>
+                            
+                            <div class="bg-gray-800 rounded p-3 mb-3">
+                                <div class="text-xs text-gray-400 mb-1">cURL Example</div>
+                                <pre class="code-block text-xs"><code class="language-bash">curl -X POST "http://localhost:5001/api/refresh-token" \
+  -H "Content-Type: application/json" \
+  -d '{"lat": 3.140853, "lng": 101.693207}'</code></pre>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 class="text-lg font-bold mb-3">Response Format</h3>
+                            <pre class="code-block text-xs"><code class="language-json">{
+  "restaurants": [
+    {
+      "id": "1-C2...",
+      "name": "McDonald's",
+      "latitude": 3.140853,
+      "longitude": 101.693207,
+      "rating": 4.8,
+      "cuisine": ["Burgers", "Fast Food"],
+      "distance": 1.2,
+      "price": 2,
+      "status": "OPENED",
+      "photo": "https://...",
+      "link": "https://food.grab.com/..."
+    }
+  ],
+  "count": 1
+}</code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logs Tab -->
+                <div id="tab-logs" class="tab-content p-4 hidden">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-lg font-bold">Request History</h3>
+                        <button onclick="clearLogs()" class="text-xs text-gray-400 hover:text-gray-300">Clear</button>
+                    </div>
+                    <div id="request-logs" class="space-y-2">
+                        <div class="text-center text-gray-500 py-10">
+                            <p>No requests yet</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -88,18 +290,21 @@
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
     <script>
-        // Init map - start with a default view (KL)
-        const map = L.map('map').setView([3.140853, 101.693207], 13);
+        // Configuration
+        const API_BASE_URL = window.location.protocol === 'file:' ? 'http://127.0.0.1:5001' : '';
+        let currentMarker = null;
+        let restaurantLayers = [];
+        let restaurantMarkerMap = new Map(); // Map from restaurant ID to marker
+        let selectedLat = null;
+        let selectedLng = null;
+        let requestLogs = [];
 
+        // Initialize Map
+        const map = L.map('map').setView([3.140853, 101.693207], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '© OpenStreetMap'
         }).addTo(map);
-
-        let currentMarker = null;   // The "Picker" pin
-        let restaurantLayers = []; // Store restaurant markers to clear them later
-        let selectedLat = null;
-        let selectedLng = null;
 
         // Icons
         const pickerIcon = L.icon({
@@ -111,98 +316,107 @@
             shadowSize: [41, 41]
         });
 
-        // Event: Click on map to move pin
+        // Map click handler
         map.on('click', function (e) {
             const { lat, lng } = e.latlng;
             updateLocation(lat, lng);
         });
 
-        // Auto-Locate on Load
+        // Auto-locate on load
         window.onload = function () {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     (position) => {
                         const lat = position.coords.latitude;
                         const lng = position.coords.longitude;
-                        console.log("Auto-located:", lat, lng);
-
-                        // Center map and set pin
                         map.setView([lat, lng], 15);
                         updateLocation(lat, lng);
-
-                        // Auto-search
-                        searchHere();
                     },
-                    (error) => {
-                        console.log("Geolocation denied or failed. Using default.");
-                    }
+                    () => console.log("Geolocation denied")
                 );
             }
+            checkTokenStatus();
         };
 
         function updateLocation(lat, lng) {
             selectedLat = lat;
             selectedLng = lng;
-
             document.getElementById('coords').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-            document.getElementById('btn-search').classList.remove('hidden');
-
-            if (currentMarker) {
-                map.removeLayer(currentMarker);
-            }
-
-            // Create draggable marker
-            currentMarker = L.marker([lat, lng], {
-                icon: pickerIcon,
-                draggable: true
-            }).addTo(map);
-
-            // Refresh on drag end
-            currentMarker.on('dragend', function (event) {
-                const marker = event.target;
-                const position = marker.getLatLng();
-                updateLocation(position.lat, position.lng);
-                searchHere(); // Auto-refresh when dropped
+            document.getElementById('btn-search').disabled = false;
+            
+            if (currentMarker) map.removeLayer(currentMarker);
+            currentMarker = L.marker([lat, lng], { icon: pickerIcon, draggable: true })
+                .addTo(map);
+            currentMarker.on('dragend', function (e) {
+                const pos = e.target.getLatLng();
+                updateLocation(pos.lat, pos.lng);
             });
         }
 
         function handleEnter(e) {
-            if (e.key === 'Enter') {
-                searchHere();
+            if (e.key === 'Enter') searchHere();
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+        }
+
+        async function checkTokenStatus() {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/restaurants?lat=3.140853&lng=101.693207&limit=1`);
+                const statusEl = document.getElementById('token-status');
+                if (res.status === 401 || res.status === 403) {
+                    statusEl.textContent = 'Token Status: Expired';
+                    statusEl.className = 'status-badge status-error';
+                } else if (res.ok) {
+                    statusEl.textContent = 'Token Status: Valid';
+                    statusEl.className = 'status-badge status-success';
+                } else {
+                    statusEl.textContent = `Token Status: Unknown (${res.status})`;
+                    statusEl.className = 'status-badge status-warning';
+                }
+            } catch (e) {
+                const statusEl = document.getElementById('token-status');
+                statusEl.textContent = 'Token Status: Unknown (network)';
+                statusEl.className = 'status-badge status-warning';
             }
         }
 
-        // Determine API Base URL
-        const API_BASE_URL = window.location.protocol === 'file:'
-            ? 'http://127.0.0.1:5001'
-            : '';
-
         async function refreshTokens() {
             if (!selectedLat) {
-                alert("Please pick a location first.");
+                alert("Please select a location first");
                 return;
             }
 
             const btn = document.getElementById('btn-refresh');
             const originalText = btn.textContent;
-            btn.textContent = "Refreshing... (Takes ~10s)";
+            btn.textContent = "Refreshing...";
             btn.disabled = true;
 
+            const startTime = Date.now();
             try {
                 const res = await fetch(`${API_BASE_URL}/api/refresh-token`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ lat: selectedLat, lng: selectedLng })
                 });
-
+                const duration = Date.now() - startTime;
                 const data = await res.json();
+                
+                addLog('POST', '/api/refresh-token', res.status, duration, data);
+                
                 if (res.ok) {
-                    alert("Tokens refreshed successfully! Now try searching.");
+                    alert(`Tokens refreshed successfully! (${duration}ms)`);
+                    checkTokenStatus();
                 } else {
-                    alert("Failed to refresh: " + (data.error || data.message));
+                    alert("Failed: " + (data.error || data.message));
                 }
             } catch (err) {
-                alert("Error connecting to server. Is python server.py running?");
+                addLog('POST', '/api/refresh-token', 'ERROR', Date.now() - startTime, { error: err.message });
+                alert("Error: " + err.message);
             } finally {
                 btn.textContent = originalText;
                 btn.disabled = false;
@@ -216,103 +430,296 @@
             const resultsDiv = document.getElementById('results');
             const loadingDiv = document.getElementById('loading');
 
-            resultsDiv.innerHTML = '';
+            // Clear previous results using DOM methods
+            while (resultsDiv.firstChild) {
+                resultsDiv.removeChild(resultsDiv.firstChild);
+            }
             loadingDiv.classList.remove('hidden');
 
-            // Clear existing restaurant markers
             restaurantLayers.forEach(layer => map.removeLayer(layer));
             restaurantLayers = [];
+            restaurantMarkerMap.clear();
 
+            const startTime = Date.now();
             try {
                 const url = `${API_BASE_URL}/api/restaurants?lat=${selectedLat}&lng=${selectedLng}&keyword=${encodeURIComponent(keyword)}`;
                 const res = await fetch(url);
+                const duration = Date.now() - startTime;
                 const data = await res.json();
+
+                addLog('GET', '/api/restaurants', res.status, duration, data);
 
                 loadingDiv.classList.add('hidden');
 
-                if (res.status === 401) {
-                    resultsDiv.innerHTML = `
-                        <div class="p-4 bg-red-100 text-red-700 rounded">
-                            <p class="font-bold">Unauthorized</p>
-                            <p class="text-sm">Tokens expired or missing. Please click <b>Refresh Tokens</b> above.</p>
-                        </div>
-                    `;
+                if (res.status === 401 || res.status === 403) {
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'bg-red-900 bg-opacity-30 border border-red-700 rounded p-4';
+                    
+                    const title = document.createElement('p');
+                    title.className = 'font-bold text-red-400';
+                    title.textContent = `Unauthorized (${res.status})`;
+                    
+                    const msg = document.createElement('p');
+                    msg.className = 'text-sm text-gray-400 mt-1';
+                    msg.textContent = 'Tokens expired. Click "Refresh Tokens" above.';
+                    
+                    errorDiv.appendChild(title);
+                    errorDiv.appendChild(msg);
+                    resultsDiv.appendChild(errorDiv);
+                    checkTokenStatus();
                     return;
                 }
 
                 if (data.restaurants) {
                     const merchants = data.restaurants;
+                    document.getElementById('result-count').textContent = merchants.length;
+                    
                     if (merchants.length === 0) {
-                        resultsDiv.innerHTML = '<p class="text-center text-gray-500">No restaurants found nearby.</p>';
+                        const emptyMsg = document.createElement('p');
+                        emptyMsg.className = 'text-center text-gray-500 py-10';
+                        emptyMsg.textContent = 'No restaurants found';
+                        resultsDiv.appendChild(emptyMsg);
                         return;
                     }
 
                     merchants.forEach(m => {
                         const rating = m.rating ? `⭐ ${m.rating}` : 'New';
                         const cuisine = m.cuisine ? m.cuisine.join(', ') : '';
-                        const isOpen = m.status === 'OPENED' ? 'Yes' : 'No';
-                        const photoUrl = m.photo || 'https://via.placeholder.com/50';
-
-                        // New fields
                         const distance = m.distance ? `${m.distance} km` : '';
                         const price = m.price ? '$'.repeat(m.price) : '';
+                        const isOpen = m.status === 'OPENED';
 
-                        // List Item
-                        const item = `
-                            <div class="border rounded p-3 hover:bg-gray-50 bg-white shadow-sm transition group cursor-pointer" onclick="highlightMarker('${m.id}')">
-                                <div class="flex justify-between items-start">
-                                    <h3 class="font-bold text-gray-800 text-base group-hover:text-green-600">${m.name}</h3>
-                                    <div class="text-right">
-                                        <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded font-medium block mb-1">${rating}</span>
-                                        <span class="text-xs text-gray-500 font-medium">${distance}</span>
-                                    </div>
-                                </div>
-                                <p class="text-sm text-gray-500 mt-1 truncate">${cuisine} • <span class="text-green-600">${price}</span></p>
-                                <div class="flex justify-between items-center mt-3">
-                                   <p class="text-xs text-gray-400">Open: <span class="${isOpen === 'Yes' ? 'text-green-600' : 'text-red-500'} font-bold">${isOpen}</span></p>
-                                   <a href="${m.link}" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 font-medium border border-blue-500 rounded px-2 py-1 hover:bg-blue-50">View Menu ↗</a>
-                                </div>
-                            </div>
-                        `;
-                        resultsDiv.innerHTML += item;
+                        // Create card using DOM construction to prevent XSS
+                        const card = document.createElement('div');
+                        card.className = 'bg-gray-800 border border-gray-700 rounded p-3 hover:border-green-500 transition cursor-pointer';
+                        card.addEventListener('click', () => highlightMarker(m.id));
 
-                        // Map Marker (Custom Image)
-                        if (m.latitude && m.longitude) {
-                            const icon = L.divIcon({
-                                className: 'custom-div-icon',
-                                html: `<div style="background-image: url('${photoUrl}'); width: 40px; height: 40px; background-size: cover; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>`,
-                                iconSize: [40, 40],
-                                iconAnchor: [20, 20]
-                            });
+                        const header = document.createElement('div');
+                        header.className = 'flex justify-between items-start mb-2';
 
-                            const marker = L.marker([m.latitude, m.longitude], { icon: icon })
-                                .bindPopup(`<b>${m.name}</b><br>${rating} • ${price}<br>${distance}<br><a href="${m.link}" target="_blank">Order Here</a>`);
+                        const title = document.createElement('h3');
+                        title.className = 'font-bold text-green-400';
+                        title.textContent = m.name ?? '(unknown)';
 
-                            // Store ID for highlighting
-                            marker._id = m.id;
+                        const rightCol = document.createElement('div');
+                        rightCol.className = 'text-right text-xs';
 
+                        const statusBadge = document.createElement('div');
+                        statusBadge.className = `status-badge ${isOpen ? 'status-success' : 'status-error'} mb-1`;
+                        statusBadge.textContent = isOpen ? 'OPEN' : 'CLOSED';
+
+                        const ratingEl = document.createElement('div');
+                        ratingEl.className = 'text-gray-400';
+                        ratingEl.textContent = rating;
+
+                        rightCol.appendChild(statusBadge);
+                        rightCol.appendChild(ratingEl);
+                        header.appendChild(title);
+                        header.appendChild(rightCol);
+
+                        const cuisineEl = document.createElement('p');
+                        cuisineEl.className = 'text-sm text-gray-400 mb-2';
+                        cuisineEl.textContent = cuisine + (price ? ' • ' + price : '');
+
+                        const footer = document.createElement('div');
+                        footer.className = 'flex justify-between items-center text-xs';
+
+                        const distanceEl = document.createElement('span');
+                        distanceEl.className = 'text-gray-500';
+                        distanceEl.textContent = distance;
+
+                        const linkEl = document.createElement('a');
+                        linkEl.className = 'text-blue-400 hover:text-blue-300';
+                        linkEl.textContent = 'View Menu →';
+                        linkEl.target = '_blank';
+                        linkEl.rel = 'noopener noreferrer';
+                        if (typeof m.link === 'string' && m.link) {
+                            linkEl.href = m.link;
+                        } else {
+                            linkEl.href = '#';
+                            linkEl.onclick = (e) => e.preventDefault();
+                        }
+
+                        footer.appendChild(distanceEl);
+                        footer.appendChild(linkEl);
+
+                        card.appendChild(header);
+                        card.appendChild(cuisineEl);
+                        card.appendChild(footer);
+                        resultsDiv.appendChild(card);
+
+                        if (m.latitude && m.longitude && m.id) {
+                            const marker = L.marker([m.latitude, m.longitude])
+                                .bindPopup(`<b>${escapeHtml(m.name ?? 'Unknown')}</b><br>${escapeHtml(rating)} • ${escapeHtml(price)}<br>${escapeHtml(distance)}`);
                             marker.addTo(map);
                             restaurantLayers.push(marker);
+                            restaurantMarkerMap.set(m.id, marker);
                         }
                     });
                 } else {
-                    resultsDiv.innerHTML = `<p class="text-red-500">Error: Unexpected API response format.</p>`;
-                    console.log(data);
+                    const errorEl = document.createElement('p');
+                    errorEl.className = 'text-red-400';
+                    errorEl.textContent = `Error: ${JSON.stringify(data)}`;
+                    resultsDiv.appendChild(errorEl);
                 }
-
             } catch (err) {
                 loadingDiv.classList.add('hidden');
-                resultsDiv.innerHTML = `<p class="text-red-500">Failed to fetch data. Is server running?</p>`;
-                console.error(err);
+                addLog('GET', '/api/restaurants', 'ERROR', Date.now() - startTime, { error: err.message });
+                const errorEl = document.createElement('p');
+                errorEl.className = 'text-red-400';
+                errorEl.textContent = `Error: ${err.message}`;
+                resultsDiv.appendChild(errorEl);
             }
         }
 
         function highlightMarker(id) {
-            const marker = restaurantLayers.find(m => m._id === id);
+            const marker = restaurantMarkerMap.get(id);
             if (marker) {
                 marker.openPopup();
                 map.panTo(marker.getLatLng());
             }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function testAPI() {
+            switchTab('api');
+            if (selectedLat && selectedLng) {
+                document.getElementById('api-params').value = JSON.stringify({
+                    lat: selectedLat,
+                    lng: selectedLng,
+                    keyword: document.getElementById('search-input').value || 'food'
+                }, null, 2);
+            }
+        }
+
+        async function executeAPITest() {
+            const endpoint = document.getElementById('api-endpoint').value;
+            const paramsText = document.getElementById('api-params').value;
+            const responseDiv = document.getElementById('api-response');
+            
+            let params = {};
+            try {
+                params = JSON.parse(paramsText);
+            } catch (e) {
+                alert("Invalid JSON in parameters");
+                return;
+            }
+
+            const startTime = Date.now();
+            try {
+                let res;
+                if (endpoint === '/api/refresh-token') {
+                    res = await fetch(`${API_BASE_URL}${endpoint}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(params)
+                    });
+                } else {
+                    // Validate params are flat primitives for URLSearchParams
+                    const flatParams = {};
+                    for (const [key, value] of Object.entries(params)) {
+                        if (value !== null && typeof value !== 'object' && typeof value !== 'undefined') {
+                            flatParams[key] = String(value);
+                        } else {
+                            console.warn(`Skipping non-primitive param: ${key}`);
+                        }
+                    }
+                    const queryString = new URLSearchParams(flatParams).toString();
+                    res = await fetch(`${API_BASE_URL}${endpoint}?${queryString}`);
+                }
+                
+                const duration = Date.now() - startTime;
+                const data = await res.json();
+                
+                addLog(endpoint.includes('refresh') ? 'POST' : 'GET', endpoint, res.status, duration, data);
+                
+                const statusEl = document.getElementById('api-status');
+                statusEl.textContent = `Status: ${res.status}`;
+                statusEl.className = res.ok ? 'status-badge status-success' : 'status-badge status-error';
+                
+                document.getElementById('api-time').textContent = `${duration}ms`;
+                document.getElementById('api-response-body').textContent = JSON.stringify(data, null, 2);
+                responseDiv.classList.remove('hidden');
+            } catch (err) {
+                addLog(endpoint.includes('refresh') ? 'POST' : 'GET', endpoint, 'ERROR', Date.now() - startTime, { error: err.message });
+                alert("Error: " + err.message);
+            }
+        }
+
+        function addLog(method, endpoint, status, duration, data) {
+            const dataStr = JSON.stringify(data);
+            const log = {
+                timestamp: new Date().toLocaleTimeString(),
+                method,
+                endpoint,
+                status,
+                duration: `${duration}ms`,
+                data: dataStr.length > 100 ? dataStr.substring(0, 100) + '...' : dataStr
+            };
+            requestLogs.unshift(log);
+            if (requestLogs.length > 50) requestLogs.pop();
+            updateLogsDisplay();
+        }
+
+        function updateLogsDisplay() {
+            const logsDiv = document.getElementById('request-logs');
+            logsDiv.innerHTML = '';
+            
+            if (requestLogs.length === 0) {
+                const emptyMsg = document.createElement('div');
+                emptyMsg.className = 'text-center text-gray-500 py-10';
+                emptyMsg.textContent = 'No requests yet';
+                logsDiv.appendChild(emptyMsg);
+                return;
+            }
+            
+            requestLogs.forEach(log => {
+                const logCard = document.createElement('div');
+                logCard.className = 'bg-gray-800 border border-gray-700 rounded p-3 text-xs mb-2';
+
+                const header = document.createElement('div');
+                header.className = 'flex justify-between items-center mb-1';
+
+                const methodEl = document.createElement('span');
+                methodEl.className = 'font-mono text-green-400';
+                methodEl.textContent = `${log.method} ${log.endpoint}`;
+
+                const statusEl = document.createElement('span');
+                let statusClass = 'status-warning';
+                if (log.status === 'ERROR') {
+                    statusClass = 'status-error';
+                } else if (typeof log.status === 'number' && log.status >= 200 && log.status < 300) {
+                    statusClass = 'status-success';
+                }
+                statusEl.className = `status-badge ${statusClass}`;
+                statusEl.textContent = log.status;
+
+                header.appendChild(methodEl);
+                header.appendChild(statusEl);
+
+                const meta = document.createElement('div');
+                meta.className = 'text-gray-400 text-xs';
+                meta.textContent = `${log.timestamp} • ${log.duration}`;
+
+                const dataPre = document.createElement('pre');
+                dataPre.className = 'mt-2 text-xs text-gray-500 overflow-x-auto';
+                dataPre.textContent = log.data;
+
+                logCard.appendChild(header);
+                logCard.appendChild(meta);
+                logCard.appendChild(dataPre);
+                logsDiv.appendChild(logCard);
+            });
+        }
+
+        function clearLogs() {
+            requestLogs = [];
+            updateLogsDisplay();
         }
     </script>
 </body>

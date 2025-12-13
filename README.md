@@ -1,164 +1,358 @@
-# GrabFood API Wrapper & Explorer
+# GrabFood API Wrapper - Developer Interface
 
-A Python-based API wrapper and explorer for GrabFood. This project reverse-engineers the GrabFood web API to allow searching for nearby restaurants using latitude and longitude coordinates.
+> **⚠️ IMPORTANT: This is NOT an official GrabFood API or port.** This project is a reverse-engineered wrapper for educational and development purposes. Use responsibly and respect Grab's terms of service.
+
+A Python-based API wrapper and developer interface for GrabFood. This project reverse-engineers the GrabFood web API to allow programmatic access to restaurant data using latitude and longitude coordinates.
 
 ## ❓ Why?
 
 GrabFood **does not provide a public API** for developers. This makes it difficult to build custom integrations, data analysis tools, or alternative frontends. This project works around these limitations by reverse-engineering the web client's behavior, allowing you to programmatically search for restaurants and data without official support.
 
-it includes:
-1.  **Selenium Auth Service**: Captures necessary authentication tokens (cookies, headers) by automating a headless Chrome browser.
-2.  **API Client**: A Python class (`GrabFoodClient`) to interact with GrabFood's internal APIs.
-3.  **Flask Server**: A lightweight API server (`/api/restaurants`).
-4.  **Frontend Explorer**: A simple `index.html` map interface to pick locations and view restaurants.
-
 ## 🚀 Features
 
-- **Automated Token Capture**: Bypasses bot detection to retrieve session tokens using Selenium.
-- **Restaurant Search**: Fetches nearby restaurants via the **Guest Category Endpoint** (`guest/v2/category`) to avoid strict `x-recaptcha-token` requirements.
-- **Local Filtering**: Implements keyword filtering (e.g., "Pizza") on the client-side (Python) since the guest endpoint only lists categories.
-- **Map Interface**: Interactive Leaflet.js map to test different coordinates and visualize data.
+### Core Functionality
+- **Automated Token Capture**: Bypasses bot detection to retrieve session tokens using Selenium
+- **Restaurant Search**: Fetches nearby restaurants via the Guest Category Endpoint (`guest/v2/category`) to avoid strict `x-recaptcha-token` requirements
+- **Local Filtering**: Implements keyword filtering (e.g., "Pizza") on the client-side since the guest endpoint only lists categories
+- **Developer-Focused UI**: Modern interface with API testing, request logs, and documentation
+
+### Advanced Features
+- **Token Expiry Detection**: Automatically detects expired tokens and triggers refresh
+- **Intelligent Caching**: In-memory cache with configurable TTL (default: 5 minutes) to reduce API calls
+- **Rate Limiting**: Built-in rate limiting with a minimum interval of 500 ms to prevent overwhelming servers
+- **User-Agent Rotation**: Random user agent selection to reduce detection risk
+- **Background Token Refresh**: Automatic token refresh every hour with error recovery
+- **Request Logging**: Track all API requests with timing and response data
+- **Error Handling**: Comprehensive error handling with detailed error messages
 
 ## 📡 API Reference
-
-The Flask server exposes a simplified endpoint to access GrabFood data.
 
 ### `GET /api/restaurants`
 
 Search for restaurants near a specific location.
 
 **Parameters:**
-- `lat` (float): Latitude of the location.
-- `lng` (float): Longitude of the location.
-- `keyword` (string, optional): Search keyword to filter results (e.g., "pizza", "kfc"). Defaults to "food".
+- `lat` (float, required): Latitude of the location (-90 to 90)
+- `lng` (float, required): Longitude of the location (-180 to 180)
+- `keyword` (string, optional): Search keyword to filter results (e.g., "pizza", "kfc"). Defaults to "food"
+- `limit` (int, optional): Maximum number of results (1-100). Defaults to 32
+- `use_cache` (bool, optional): Use cached results if available. Defaults to true
+
+**Example Request:**
+```bash
+curl "http://localhost:5001/api/restaurants?lat=3.140853&lng=101.693207&keyword=pizza&limit=20"
+```
 
 **Response:**
-Returns a JSON object containing a list of restaurants.
-
 ```json
 {
-  "count": 2,
   "restaurants": [
     {
       "id": "1-C2...",
       "name": "McDonald's - Ipoh",
+      "latitude": 3.140853,
+      "longitude": 101.693207,
       "cuisine": ["Burgers", "Fast Food"],
       "rating": 4.8,
       "distance": 1.2,
-      "price": 2,  // 1=$ (Cheap), 2=$$ (Moderate), 3=$$$ (Expensive)
+      "price": 2,
       "status": "OPENED",
       "photo": "https://food-cms.grab.com/...",
       "link": "https://food.grab.com/my/en/restaurant/mcdonalds-ipoh-delivery/1-C2..."
-    },
-    ...
-  ]
+    }
+  ],
+  "count": 1
+}
+```
+
+**Price Levels:**
+- `1` = $ (Cheap)
+- `2` = $$ (Moderate)
+- `3` = $$$ (Expensive)
+
+### `POST /api/refresh-token`
+
+Manually refresh authentication tokens using Selenium. This endpoint launches a headless browser to capture fresh tokens.
+
+**Request Body:**
+```json
+{
+  "lat": 3.140853,
+  "lng": 101.693207
+}
+```
+
+**Example Request:**
+```bash
+curl -X POST "http://localhost:5001/api/refresh-token" \
+  -H "Content-Type: application/json" \
+  -d '{"lat": 3.140853, "lng": 101.693207}'
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "message": "Tokens refreshed successfully"
 }
 ```
 
 ## 🛠️ Installation
 
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/yourusername/grabfood-api-wrapper.git
-    cd grabfood-api-wrapper
-    ```
+### Prerequisites
+- Python 3.11+
+- Chrome/Chromium browser installed
+- ChromeDriver (automatically managed by webdriver-manager)
 
-2.  **Install Dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
-    *Note: Requires Chrome installed on your machine.*
+### Setup
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/lightyoruichi/grabfood-api-wrapper.git
+   cd grabfood-api-wrapper
+   ```
+   
+   Or using SSH:
+   ```bash
+   git clone git@github.com:lightyoruichi/grabfood-api-wrapper.git
+   cd grabfood-api-wrapper
+   ```
+
+2. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Initial Token Capture** (Optional - tokens refresh automatically):
+   ```bash
+   python3 grab_selenium_service.py
+   ```
+   This generates `grab_auth_context.json` with authentication tokens.
 
 ## 🏃 Usage
 
-### 1. Capture Authentication Tokens
-First, run the Selenium service to generate `grab_auth_context.json`. This launches a headless browser to "log in" as a guest.
-
-```bash
-python3 grab_selenium_service.py
-```
-
-### 2. Start the API Server
-Run the Flask server to expose the API.
+### Start the Server
 
 ```bash
 python3 server.py
 ```
 
-### 3. Open the Explorer
-Open `index.html` in your browser.
-1.  Click anywhere on the map to pick a location.
-2.  Click **"Search Here"**.
-3.  View the list of nearby restaurants!
+The server starts on `http://127.0.0.1:5001` by default (development mode).
+
+### Developer Interface
+
+Open `http://127.0.0.1:5001` in your browser to access the developer interface:
+
+- **Results Tab**: View restaurant search results with map visualization
+- **API Tester Tab**: Test API endpoints directly with custom parameters
+- **Documentation Tab**: Inline API documentation with code examples
+- **Request Logs Tab**: View request history with timing and response data
+
+### Programmatic Usage
+
+```python
+from grab_api_client import GrabFoodClient
+
+# Initialize client
+client = GrabFoodClient()
+
+# Search for restaurants
+restaurants = client.search_restaurants(
+    lat=3.140853,
+    lng=101.693207,
+    keyword="pizza",
+    limit=20,
+    use_cache=True
+)
+
+for restaurant in restaurants:
+    print(f"{restaurant['name']} - Rating: {restaurant['rating']}")
+```
 
 ## 📦 Project Structure
 
-### Core System
-- **`server.py`**: The main entry point. Runs a Flask web server (Port 5001) that serves the frontend and proxies requests to Grab.
-- **`index.html`**: The frontend user interface. Uses Leaflet.js for the map and fetch API to communicate with `server.py`.
-- **`grab_selenium_service.py`**: A background service using Selenium (Headless Chrome). It navigates to the real GrabFood site to capture valid session tokens (`x-recaptcha-token`, etc.) needed to bypass security.
-- **`grab_api_client.py`**: A Python class that maps the backend logic to Grab's API endpoints. It uses the captured tokens to make authenticated requests.
+### Core Files
+- **`server.py`**: Flask web server (Port 5001) that serves the developer interface and API endpoints
+- **`index.html`**: Developer-focused frontend with API testing, logs, and documentation
+- **`grab_api_client.py`**: Python client with caching, rate limiting, and token management
+- **`grab_selenium_service.py`**: Selenium service for automated token capture
 
-### Data & Config
-- **`grab_auth_context.json`**: Auto-generated by the Selenium service. Contains the "stolen" headers and cookies.
-- **`requirements.txt`**: Python dependencies.
+### Configuration
+- **`grab_auth_context.json`**: Auto-generated authentication tokens (created by Selenium service)
+- **`requirements.txt`**: Python dependencies
+- **`nixpacks.toml`**: Deployment configuration for Railway/Nixpacks
+- **`Dockerfile`**: Docker deployment configuration
 
-## ⚠️ Disclaimer
-This is for educational purposes only. Use responsibly and respect Grab's terms of service.
+## 🔄 How It Works
 
-## 🔄 User Flow
+### Authentication Flow
 
-The system works by orchestrating a local frontend, a backend server, and a headless browser:
+1. **Token Capture**: Selenium launches a headless Chrome browser and navigates to GrabFood
+2. **Token Extraction**: Intercepts HTTP headers (x-recaptcha-token, cookies, etc.) from network requests
+3. **Token Storage**: Saves tokens to `grab_auth_context.json` for API requests
+4. **Automatic Refresh**: Background worker refreshes tokens every hour (or on 401/403 errors)
 
-1.  **Launch**: Run `server.py` to start the Flask web server (Default Port 5001).
-2.  **Access**: Open `http://127.0.0.1:5001` in your browser.
-3.  **Interaction**:
-    *   **Pick Location**: Click on the map to select coordinates.
-    *   **Refresh Tokens**: Click the button to launch a background headless browser (Selenium). This browser visits GrabFood, mimics a user, and "steals" the valid authentication tokens (saved to `grab_auth_context.json`).
-    *   **Search**: Click "Search Here". The server uses the captured tokens to query Grab's private API and displays the results.
+### Request Flow
+
+1. **API Request**: Client makes request to `/api/restaurants` with coordinates
+2. **Cache Check**: Server checks cache for recent results (5-minute TTL)
+3. **Token Validation**: Validates tokens and refreshes if expired
+4. **Rate Limiting**: Enforces minimum 500ms between requests
+5. **API Call**: Makes authenticated request to GrabFood's internal API
+6. **Response Processing**: Filters results by keyword and returns JSON
 
 ### Sequence Diagram
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant Browser as Local Browser (index.html)
-    participant Server as Flask Server (server.py)
-    participant Selenium as Headless Chrome
-    participant Grab as GrabFood Official Site
+    participant Dev as Developer
+    participant UI as Developer Interface
+    participant Server as Flask Server
+    participant Client as GrabFoodClient
+    participant Cache as Cache Layer
+    participant Selenium as Selenium Service
+    participant Grab as GrabFood API
 
-    User->>Browser: Opens http://127.0.0.1:5001
-    User->>Browser: Selects Location (Lat, Lng)
+    Dev->>UI: Opens http://127.0.0.1:5001
+    Dev->>UI: Selects Location & Searches
     
-    rect rgb(240, 248, 255)
-    note right of User: Authentication Phase
-    User->>Browser: Clicks "Refresh Tokens"
-    Browser->>Server: POST /api/refresh-token
-    Server->>Selenium: Launch Headless Browser
-    Selenium->>Grab: Visit food.grab.com
-    Grab-->>Selenium: Return Site Assets & Cookies
-    Selenium->>Selenium: Intercept HTTP Headers (x-recaptcha-token, etc.)
-    Selenium->>Server: Return Captured Context
-    Server->>Server: Save to grab_auth_context.json
-    Server-->>Browser: 200 OK (Tokens Ready)
+    UI->>Server: GET /api/restaurants?lat=...&lng=...
+    Server->>Client: search_restaurants()
+    
+    Client->>Cache: Check cache
+    alt Cache Hit
+        Cache-->>Client: Return cached data
+    else Cache Miss
+        Client->>Client: Rate limit check
+        Client->>Grab: GET /foodweb/guest/v2/category
+        alt Token Expired
+            Grab-->>Client: 401/403
+            Client->>Selenium: refresh_tokens()
+            Selenium->>Grab: Navigate & Capture
+            Grab-->>Selenium: Return tokens
+            Selenium-->>Client: Fresh tokens
+            Client->>Grab: Retry request
+        end
+        Grab-->>Client: Restaurant data
+        Client->>Cache: Store in cache
     end
-
-    rect rgb(255, 250, 240)
-    note right of User: Data Fetching Phase
-    User->>Browser: Clicks "Search Here"
-    Browser->>Server: GET /api/restaurants?lat=...&lng=...
-    Server->>Server: Load tokens from grab_auth_context.json
-    Server->>Grab: GET /foodweb/v2/category (With Stolen Tokens)
-    Grab-->>Server: Return JSON (Restaurants)
-    Server-->>Browser: Return JSON
-    Browser-->>User: Display Restaurants on List
-    end
+    
+    Client-->>Server: Return results
+    Server-->>UI: JSON response
+    UI-->>Dev: Display results
 ```
+
+## 🔧 Advanced Configuration
+
+### Cache TTL
+
+Modify cache TTL in `grab_api_client.py`:
+
+```python
+self.cache_ttl = 300  # 5 minutes (default)
+```
+
+### Rate Limiting
+
+Adjust rate limit interval:
+
+```python
+self.min_request_interval = 0.5  # 500ms (default)
+```
+
+### Token Refresh Interval
+
+Modify refresh interval in `server.py`:
+
+```python
+time.sleep(3600)  # 1 hour (default)
+```
+
+## 🚢 Deployment
+
+### Docker
+
+```bash
+docker build -t grabfood-api .
+# Development: map to port 5001 to match local dev server
+docker run -p 5001:5001 grabfood-api
+# Production: uses PORT env var (defaults to 5000)
+docker run -p 5000:5000 -e PORT=5000 grabfood-api
+```
+
+**Note**: The Docker container defaults to port 5000 for production, while the local development server uses port 5001. Adjust port mappings as needed.
+
+### Railway / Nixpacks
+
+The project includes `nixpacks.toml` for Railway deployment. Ensure Chrome dependencies are installed (handled automatically).
+
+### Environment Variables
+
+- `PORT`: Server port (default: 5001 for local development, 5000 for Docker/production)
+- `CHROME_BIN`: Path to Chrome/Chromium binary (auto-detected)
+- `CHROMEDRIVER_PATH`: Path to ChromeDriver (auto-detected)
+
+## ⚠️ Disclaimer & Legal
+
+**This is NOT an official GrabFood API or port.** This project is:
+
+- For **educational purposes only**
+- A **reverse-engineering experiment**
+- **Not affiliated** with Grab or GrabFood
+- **Not endorsed** by Grab
+
+**Important:**
+- Use responsibly and respect Grab's terms of service
+- Implement rate limiting to avoid overwhelming servers
+- Be aware that this may violate Grab's ToS
+- Tokens expire and require periodic refresh
+- Grab may block or detect automated access
 
 ## 🔧 Troubleshooting
 
-### Deployment: Selenium Exit Code 127
-If you see `Service /.../chromedriver unexpectedly exited. Status code was: 127` in your deployment logs (e.g., Railway, Heroku), it usually means **missing shared system libraries** (like `libnss3`, `libgconf`, etc.) or that the Chromium binary cannot be found.
+### Token Expiry
 
-- **Solution**: Ensure your deployment environment installs all required Linux dependencies for Chrome.
-- **Reference**: [StackOverflow Discussion on Exit Code 127](https://stackoverflow.com/questions/49323099/webdriverexception-message-service-chromedriver-unexpectedly-exited-status-co)
+If you see 401/403 errors:
+1. Click "Refresh Tokens" in the UI, or
+2. Run `python3 grab_selenium_service.py` manually
+
+### Selenium Exit Code 127 (Deployment)
+
+Missing Chrome dependencies. Ensure your deployment includes:
+- Chromium/Chrome binary
+- ChromeDriver
+- Required system libraries (libnss3, libgconf-2-4, etc.)
+
+See `Dockerfile` or `nixpacks.toml` for required packages.
+
+### No Results Returned
+
+- Verify coordinates are valid (lat: -90 to 90, lng: -180 to 180)
+- Check if tokens are valid (check token status in UI)
+- Try a different location or keyword
+- Check server logs for errors
+
+## 📝 Recent Improvements
+
+### Version 2.0 - Developer Focused
+
+- **Redesigned UI**: Modern developer interface with dark theme
+- **API Testing**: Built-in API tester with request/response viewer
+- **Request Logging**: Track all API calls with timing and status
+- **Token Management**: Automatic token refresh with status indicators
+- **Caching**: Intelligent caching to reduce API calls
+- **Rate Limiting**: Built-in rate limiting to respect server limits
+- **Error Handling**: Comprehensive error handling with detailed messages
+- **Documentation**: Inline API documentation with code examples
+
+## 🤝 Contributing
+
+Contributions welcome! Please ensure:
+- Code follows existing style
+- Tests pass (if applicable)
+- Documentation is updated
+- Respects rate limits and Grab's ToS
+
+## 📄 License
+
+This project is for educational purposes. Use at your own risk.

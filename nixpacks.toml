@@ -1,6 +1,29 @@
 [phases.setup]
 nixPkgs = ["python3", "chromium", "chromedriver"]
 
+# Alternative: Use apt packages if nix packages don't work
+# [phases.setup]
+# aptPkgs = [
+#     "chromium",
+#     "chromium-driver",
+#     "libnss3",
+#     "libgconf-2-4",
+#     "libfontconfig1",
+#     "libxss1",
+#     "libasound2",
+#     "libxrandr2",
+#     "libxcomposite1",
+#     "libxcursor1",
+#     "libxdamage1",
+#     "libxi6",
+#     "libxtst6",
+#     "libpangocairo-1.0-0",
+#     "libatk1.0-0",
+#     "libcairo-gobject2",
+#     "libgtk-3-0",
+#     "libgdk-pixbuf2.0-0"
+# ]
+
 [phases.build]
 cmds = ["pip install -r requirements.txt"]
 
@@ -8,6 +31,6 @@ cmds = ["pip install -r requirements.txt"]
 # We handle path discovery in grab_selenium_service.py
 
 [start]
-cmd = "gunicorn server:app --log-file -"
+cmd = "gunicorn server:app --bind 0.0.0.0:$PORT --log-file -"
 
 
