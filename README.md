@@ -154,3 +154,11 @@ sequenceDiagram
     Browser-->>User: Display Restaurants on List
     end
 ```
+
+## 🔧 Troubleshooting
+
+### Deployment: Selenium Exit Code 127
+If you see `Service /.../chromedriver unexpectedly exited. Status code was: 127` in your deployment logs (e.g., Railway, Heroku), it usually means **missing shared system libraries** (like `libnss3`, `libgconf`, etc.) or that the Chromium binary cannot be found.
+
+- **Solution**: Ensure your deployment environment installs all required Linux dependencies for Chrome.
+- **Reference**: [StackOverflow Discussion on Exit Code 127](https://stackoverflow.com/questions/49323099/webdriverexception-message-service-chromedriver-unexpectedly-exited-status-co)
