@@ -57,14 +57,14 @@ class GrabSeleniumService:
 
         if chrome_bin:
             logger.info(f"Using Chrome Binary: {chrome_bin}")
-            options.binary_location = chrome_bin
+            chrome_options.binary_location = chrome_bin
         else:
              logger.info("Chrome binary not found in PATH or env vars, relying on default.")
         
         # Additional safe options for container environments
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--headless=new") 
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--headless=new") 
 
         # Wire interceptor options
         seleniumwire_options = {
@@ -83,7 +83,7 @@ class GrabSeleniumService:
                 
             self.driver = webdriver.Chrome(
                 service=service, 
-                options=options,
+                options=chrome_options,
                 seleniumwire_options=seleniumwire_options
             )
         except Exception as e:
