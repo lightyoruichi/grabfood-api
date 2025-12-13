@@ -1,29 +1,11 @@
 [phases.setup]
-aptPkgs = [
-    "chromium", 
-    "chromium-driver", 
-    "libglib2.0-0", 
-    "libnss3", 
-    "libgconf-2-4", 
-    "libfontconfig1", 
-    "libxrender1", 
-    "libxtst6", 
-    "libxi6",
-    "libxrandr2",
-    "libxcursor1",
-    "libxdamage1",
-    "libxcomposite1",
-    "libasound2",
-    "libatk1.0-0",
-    "libgtk-3-0",
-    "libxss1"
-]
+nixPkgs = ["python3", "chromium", "chromedriver"]
 
 [phases.build]
 cmds = ["pip install -r requirements.txt"]
 
-# Explicitly ensure the binaries are found in typical Debian locations if needed, 
-# though apt install puts them in /usr/bin usually.
+# Nix packages are installed in /nix/store. 
+# We handle path discovery in grab_selenium_service.py
 
 [start]
 cmd = "gunicorn server:app --log-file -"

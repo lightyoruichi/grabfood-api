@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import shutil
+import glob
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -58,9 +59,26 @@ class GrabSeleniumService:
         # Auto-detect system binaries if not explicitly set (Critical for Railway/Nixpacks)
         if not chrome_bin:
             chrome_bin = shutil.which("chromium") or shutil.which("google-chrome") or shutil.which("chromium-browser")
-        
+            
+            # Fallback: Check /nix/store if not in PATH (Common in Nixpacks)
+            if not chrome_bin and os.path.exists("/nix/store"):
+                logger.info("Searching /nix/store for chromium...")
+                # Look for chromium executable in nix store
+                matches = glob.glob("/nix/store/*-chromium-*/bin/chromium")
+                if matches:
+                    chrome_bin = matches[0]
+                    logger.info(f"Found chromium in /nix/store: {chrome_bin}")
+
         if not chromedriver_path:
             chromedriver_path = shutil.which("chromedriver") or shutil.which("chromium-driver")
+            
+            # Fallback: Check /nix/store
+            if not chromedriver_path and os.path.exists("/nix/store"):
+                logger.info("Searching /nix/store for chromedriver...")
+                matches = glob.glob("/nix/store/*-chromedriver-*/bin/chromedriver")
+                if matches:
+                    chromedriver_path = matches[0]
+                    logger.info(f"Found chromedriver in /nix/store: {chromedriver_path}")
 
         if chrome_bin:
             logger.info(f"Using Chrome Binary: {chrome_bin}")
