@@ -5,6 +5,7 @@ from selenium.webdriver.chrome.options import Options
 import time
 import json
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
