@@ -108,14 +108,13 @@ curl -X POST "http://localhost:5001/api/refresh-token" \
 
 1. **Clone the repository**:
    ```bash
-   # Replace <your-org-or-username> with your GitHub username or organization
-   git clone https://github.com/<your-org-or-username>/grabfood-api-wrapper.git
+   git clone https://github.com/lightyoruichi/grabfood-api-wrapper.git
    cd grabfood-api-wrapper
    ```
    
    Or using SSH:
    ```bash
-   git clone git@github.com:<your-org-or-username>/grabfood-api-wrapper.git
+   git clone git@github.com:lightyoruichi/grabfood-api-wrapper.git
    cd grabfood-api-wrapper
    ```
 
