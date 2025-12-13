@@ -1,8 +1,11 @@
 [phases.setup]
-nixPkgs = ["python3", "chromium", "chromedriver"]
+aptPkgs = ["chromium", "chromium-driver", "libglib2.0-0", "libnss3", "libmnl0"]
 
 [phases.build]
 cmds = ["pip install -r requirements.txt"]
+
+# Explicitly ensure the binaries are found in typical Debian locations if needed, 
+# though apt install puts them in /usr/bin usually.
 
 [start]
 cmd = "gunicorn server:app --log-file -"

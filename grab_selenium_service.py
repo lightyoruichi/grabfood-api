@@ -47,13 +47,20 @@ class GrabSeleniumService:
         # Environment variables for Railway/Production
         chrome_bin = os.environ.get("CHROME_BIN")
         chromedriver_path = os.environ.get("CHROMEDRIVER_PATH")
+        
+        # Debugging Railway Environment
+        logger.info(f"PATH: {os.environ.get('PATH')}")
+        logger.info(f"shutil.which('chromium'): {shutil.which('chromium')}")
+        logger.info(f"shutil.which('chromium-browser'): {shutil.which('chromium-browser')}")
+        logger.info(f"shutil.which('chromedriver'): {shutil.which('chromedriver')}")
+        logger.info(f"shutil.which('chromium-driver'): {shutil.which('chromium-driver')}")
 
         # Auto-detect system binaries if not explicitly set (Critical for Railway/Nixpacks)
         if not chrome_bin:
             chrome_bin = shutil.which("chromium") or shutil.which("google-chrome") or shutil.which("chromium-browser")
         
         if not chromedriver_path:
-            chromedriver_path = shutil.which("chromedriver")
+            chromedriver_path = shutil.which("chromedriver") or shutil.which("chromium-driver")
 
         if chrome_bin:
             logger.info(f"Using Chrome Binary: {chrome_bin}")
