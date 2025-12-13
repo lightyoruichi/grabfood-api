@@ -2,18 +2,46 @@ import requests
 import json
 import os
 import time
+import random
+import logging
 from urllib.parse import quote
+from datetime import datetime, timedelta
+from threading import Lock
+
+logger = logging.getLogger(__name__)
 
 class GrabFoodClient:
-    def __init__(self):
+    def __init__(self, refresh_callback=None):
         self.BASE_URL = "https://portal.grab.com/foodweb/v2"
         self.GUEST_URL = "https://portal.grab.com/foodweb/guest/v2"
+        self.refresh_callback = refresh_callback  # Callback to refresh tokens
+        
+        # Rate limiting
+        self.last_request_time = 0
+        self.min_request_interval = 0.5  # Minimum 500ms between requests
+        self.rate_limit_lock = Lock()
+        
+        # Cache for restaurant searches
+        self.cache = {}
+        self.cache_lock = Lock()
+        self.cache_ttl = 300  # 5 minutes default TTL
+        
+        # User agent rotation pool
+        self.user_agents = [
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        ]
+        
+        # Initialize headers after user_agents is defined
         self.headers = self._get_headers()
 
     def _get_headers(self):
-        # Default minimal headers
+        # Default minimal headers with rotated user agent
         headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "User-Agent": random.choice(self.user_agents),
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "en-US,en;q=0.9",
             "Origin": "https://food.grab.com",
@@ -53,23 +81,102 @@ class GrabFoodClient:
                             else:
                                 headers['cookie'] = cookie_str
                             
-                    print("Loaded Authentication Context from grab_auth_context.json")
+                    logger.info("Loaded Authentication Context from grab_auth_context.json")
             except Exception as e:
-                print(f"Failed to load auth context: {e}")
+                logger.error(f"Failed to load auth context: {e}")
         
         return headers
+    
+    def _is_token_expired(self, response):
+        """Check if the response indicates token expiry"""
+        if response.status_code == 401 or response.status_code == 403:
+            # Check response body for token-related errors
+            try:
+                error_data = response.json()
+                error_msg = str(error_data).lower()
+                if any(keyword in error_msg for keyword in ['token', 'unauthorized', 'forbidden', 'expired', 'invalid']):
+                    return True
+            except:
+                pass
+            return True
+        return False
+    
+    def refresh_tokens(self):
+        """Refresh authentication tokens using the callback"""
+        if self.refresh_callback:
+            logger.info("Refreshing tokens via callback...")
+            try:
+                self.refresh_callback()
+                # Reload headers after refresh
+                self.headers = self._get_headers()
+                logger.info("Tokens refreshed successfully")
+                return True
+            except Exception as e:
+                logger.error(f"Token refresh failed: {e}")
+                return False
+        return False
+    
+    def _rate_limit(self):
+        """Enforce rate limiting between requests"""
+        with self.rate_limit_lock:
+            current_time = time.time()
+            time_since_last = current_time - self.last_request_time
+            if time_since_last < self.min_request_interval:
+                sleep_time = self.min_request_interval - time_since_last
+                time.sleep(sleep_time)
+            self.last_request_time = time.time()
+    
+    def _get_cache_key(self, lat, lng, keyword):
+        """Generate cache key for search parameters"""
+        return f"{lat:.6f}_{lng:.6f}_{keyword.lower()}"
+    
+    def _get_cached_result(self, cache_key):
+        """Get cached result if valid"""
+        with self.cache_lock:
+            if cache_key in self.cache:
+                data, timestamp = self.cache[cache_key]
+                if datetime.now() - timestamp < timedelta(seconds=self.cache_ttl):
+                    logger.info(f"Cache hit for key: {cache_key}")
+                    return data
+                else:
+                    # Expired, remove from cache
+                    del self.cache[cache_key]
+                    logger.info(f"Cache expired for key: {cache_key}")
+        return None
+    
+    def _set_cached_result(self, cache_key, data):
+        """Store result in cache"""
+        with self.cache_lock:
+            self.cache[cache_key] = (data, datetime.now())
+            logger.info(f"Cached result for key: {cache_key}")
 
-    def search_restaurants(self, lat, lng, keyword="food", limit=32):
+    def search_restaurants(self, lat, lng, keyword="food", limit=32, use_cache=True):
         """
         Search for restaurants using the Guest API (v2/category) and filter locally.
         This bypasses the need for x-recaptcha-token required by v2/search.
+        
+        Args:
+            lat: Latitude
+            lng: Longitude
+            keyword: Search keyword (default: "food")
+            limit: Maximum number of results (default: 32)
+            use_cache: Whether to use cached results (default: True)
         """
+        # Check cache first
+        cache_key = self._get_cache_key(lat, lng, keyword)
+        if use_cache:
+            cached_result = self._get_cached_result(cache_key)
+            if cached_result is not None:
+                return cached_result[:limit]
+        
+        # Enforce rate limiting
+        self._rate_limit()
+        
         # Endpoint for guest category listing (works without strict auth)
         target_url = "https://portal.grab.com/foodweb/guest/v2/category"
         
         # We use a generic category ID to get a broad list. 
         # ID 7077 is often "Food Delivery" or similar generic category.
-        # or we can omit it? Let's try to minimal params first found in previous working calls.
         params = {
             "latlng": f"{lat},{lng}",
             "categoryShortcutID": "7077", # Generic "Food" category
@@ -78,14 +185,26 @@ class GrabFoodClient:
             "countryCode": "MY",
         }
         
-        print(f"Searching via Guest API: {target_url} with params {params}")
+        logger.info(f"Searching via Guest API: {target_url} with params {params}")
         
         try:
             response = requests.get(target_url, headers=self.headers, params=params, timeout=15)
-            print(f"Response Status: {response.status_code}")
+            logger.info(f"Response Status: {response.status_code}")
+            
+            # Check for token expiry
+            if self._is_token_expired(response):
+                logger.warning("Token expired, attempting refresh...")
+                if self.refresh_tokens():
+                    # Retry request with new tokens
+                    self._rate_limit()
+                    response = requests.get(target_url, headers=self.headers, params=params, timeout=15)
+                    logger.info(f"Retry Response Status: {response.status_code}")
+                else:
+                    logger.error("Token refresh failed")
+                    return []
             
             if response.status_code != 200:
-                print(f"Error response: {response.text}")
+                logger.error(f"Error response: {response.text}")
                 return []
                 
             data = response.json()
@@ -110,18 +229,22 @@ class GrabFoodClient:
                     name = brief.get('displayInfo', {}).get('primaryText') or m.get('address', {}).get('name', '[No Name]')
                     cuisines = " ".join(brief.get('cuisine', []))
                     
-                    print(f"Checking: {name} | Cuisines: {cuisines}")
-                    
                     if kw in name.lower() or kw in cuisines.lower():
                         filtered.append(m)
                 
-                print(f"Filtered {len(merchants)} -> {len(filtered)} results for keyword '{keyword}'")
+                logger.info(f"Filtered {len(merchants)} -> {len(filtered)} results for keyword '{keyword}'")
                 merchants = filtered
-                
-            return merchants[:limit]
+            
+            result = merchants[:limit]
+            
+            # Cache the result
+            if use_cache:
+                self._set_cached_result(cache_key, result)
+            
+            return result
             
         except Exception as e:
-            print(f"API Error: {e}")
+            logger.error(f"API Error: {e}")
             return []
 
 if __name__ == "__main__":
