@@ -252,9 +252,9 @@ if __name__ == "__main__":
     # Test Block
     client = GrabFoodClient()
     
-    # Ipoh Coordinates
-    lat = 4.543089619127414
-    lng = 101.04479068977173
+    # Kuala Lumpur Coordinates
+    lat = 3.1390
+    lng = 101.6869
     
     print("Testing Search Strategy...")
     restaurants = client.search_restaurants(lat, lng, keyword="Murni")

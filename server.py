@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request, send_from_directory, send_file
 from flask_cors import CORS
 from grab_api_client import GrabFoodClient
-from grab_selenium_service import GrabSeleniumService
+from grab_playwright_service import GrabPlaywrightService
 import threading
 import logging
 import os
@@ -21,7 +21,7 @@ DEFAULT_LNG = 101.6869
 def refresh_tokens_callback():
     """Callback function to refresh tokens"""
     try:
-        service = GrabSeleniumService(headless=True)
+        service = GrabPlaywrightService(headless=True)
         ctx = service.get_auth_context(DEFAULT_LAT, DEFAULT_LNG)
         if ctx.get('headers'):
             logger.info("Background token refresh successful")
@@ -78,15 +78,15 @@ def home():
 
 def update_tokens_background(lat, lng):
     """
-    Helper to run Selenium in background if needed.
+    Helper to run Playwright in background if needed.
     """
-    service = GrabSeleniumService(headless=True)
+    service = GrabPlaywrightService(headless=True)
     service.get_auth_context(lat, lng)
 
 @app.route('/api/refresh-token', methods=['POST'])
 def refresh_token():
     """
-    Endpoint to force refresh tokens via Selenium.
+    Endpoint to force refresh tokens via Playwright.
     Expects JSON: { "lat": 123.45, "lng": 67.89 } (optional, uses defaults if not provided)
     """
     try:
@@ -110,7 +110,7 @@ def refresh_token():
             }), 400
         
         # Run synchronously to ensure token is ready
-        service = GrabSeleniumService(headless=True)
+        service = GrabPlaywrightService(headless=True)
         ctx = service.get_auth_context(lat, lng)
         if ctx.get('headers'):
             # Reload client headers after refresh

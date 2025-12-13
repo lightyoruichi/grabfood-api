@@ -25,10 +25,15 @@ nixPkgs = ["python3", "chromium", "chromedriver"]
 # ]
 
 [phases.build]
-cmds = ["pip install -r requirements.txt"]
+cmds = [
+    "pip install -r requirements.txt",
+    "playwright install chromium",
+    "playwright install-deps chromium"
+]
 
 # Nix packages are installed in /nix/store. 
-# We handle path discovery in grab_selenium_service.py
+# We handle path discovery in grab_playwright_service.py
+# Playwright browsers will be installed via: playwright install chromium
 
 [start]
 cmd = "gunicorn server:app --bind 0.0.0.0:$PORT --log-file -"

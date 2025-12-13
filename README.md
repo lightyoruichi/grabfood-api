@@ -11,7 +11,7 @@ GrabFood **does not provide a public API** for developers. This makes it difficu
 ## 🚀 Features
 
 ### Core Functionality
-- **Automated Token Capture**: Bypasses bot detection to retrieve session tokens using Selenium
+- **Automated Token Capture**: Bypasses bot detection to retrieve session tokens using Playwright
 - **Restaurant Search**: Fetches nearby restaurants via the Guest Category Endpoint (`guest/v2/category`) to avoid strict `x-recaptcha-token` requirements
 - **Local Filtering**: Implements keyword filtering (e.g., "Pizza") on the client-side since the guest endpoint only lists categories
 - **Developer-Focused UI**: Modern interface with API testing, request logs, and documentation
@@ -72,7 +72,7 @@ curl "http://localhost:5001/api/restaurants?lat=3.140853&lng=101.693207&keyword=
 
 ### `POST /api/refresh-token`
 
-Manually refresh authentication tokens using Selenium. This endpoint launches a headless browser to capture fresh tokens.
+Manually refresh authentication tokens using Playwright. This endpoint launches a headless browser to capture fresh tokens.
 
 **Request Body:**
 ```json
@@ -101,8 +101,7 @@ curl -X POST "http://localhost:5001/api/refresh-token" \
 
 ### Prerequisites
 - Python 3.11+
-- Chrome/Chromium browser installed
-- ChromeDriver (automatically managed by webdriver-manager)
+- Playwright browsers (installed automatically via `playwright install chromium`)
 
 ### Setup
 
@@ -123,9 +122,14 @@ curl -X POST "http://localhost:5001/api/refresh-token" \
    pip install -r requirements.txt
    ```
 
-3. **Initial Token Capture** (Optional - tokens refresh automatically):
+3. **Install Playwright Browsers**:
    ```bash
-   python3 grab_selenium_service.py
+   playwright install chromium
+   ```
+
+4. **Initial Token Capture** (Optional - tokens refresh automatically):
+   ```bash
+   python3 grab_playwright_service.py
    ```
    This generates `grab_auth_context.json` with authentication tokens.
 
@@ -175,10 +179,10 @@ for restaurant in restaurants:
 - **`server.py`**: Flask web server (Port 5001) that serves the developer interface and API endpoints
 - **`index.html`**: Developer-focused frontend with API testing, logs, and documentation
 - **`grab_api_client.py`**: Python client with caching, rate limiting, and token management
-- **`grab_selenium_service.py`**: Selenium service for automated token capture
+- **`grab_playwright_service.py`**: Playwright service for automated token capture
 
 ### Configuration
-- **`grab_auth_context.json`**: Auto-generated authentication tokens (created by Selenium service)
+- **`grab_auth_context.json`**: Auto-generated authentication tokens (created by Playwright service)
 - **`requirements.txt`**: Python dependencies
 - **`nixpacks.toml`**: Deployment configuration for Railway/Nixpacks
 - **`Dockerfile`**: Docker deployment configuration
@@ -187,7 +191,7 @@ for restaurant in restaurants:
 
 ### Authentication Flow
 
-1. **Token Capture**: Selenium launches a headless Chrome browser and navigates to GrabFood
+1. **Token Capture**: Playwright launches a headless Chromium browser and navigates to GrabFood
 2. **Token Extraction**: Intercepts HTTP headers (x-recaptcha-token, cookies, etc.) from network requests
 3. **Token Storage**: Saves tokens to `grab_auth_context.json` for API requests
 4. **Automatic Refresh**: Background worker refreshes tokens every hour (or on 401/403 errors)
@@ -210,7 +214,7 @@ sequenceDiagram
     participant Server as Flask Server
     participant Client as GrabFoodClient
     participant Cache as Cache Layer
-    participant Selenium as Selenium Service
+    participant Playwright as Playwright Service
     participant Grab as GrabFood API
 
     Dev->>UI: Opens http://127.0.0.1:5001
@@ -227,10 +231,10 @@ sequenceDiagram
         Client->>Grab: GET /foodweb/guest/v2/category
         alt Token Expired
             Grab-->>Client: 401/403
-            Client->>Selenium: refresh_tokens()
-            Selenium->>Grab: Navigate & Capture
-            Grab-->>Selenium: Return tokens
-            Selenium-->>Client: Fresh tokens
+            Client->>Playwright: refresh_tokens()
+            Playwright->>Grab: Navigate & Capture
+            Grab-->>Playwright: Return tokens
+            Playwright-->>Client: Fresh tokens
             Client->>Grab: Retry request
         end
         Grab-->>Client: Restaurant data
@@ -289,8 +293,7 @@ The project includes `nixpacks.toml` for Railway deployment. Ensure Chrome depen
 ### Environment Variables
 
 - `PORT`: Server port (default: 5001 for local development, 5000 for Docker/production)
-- `CHROME_BIN`: Path to Chrome/Chromium binary (auto-detected)
-- `CHROMEDRIVER_PATH`: Path to ChromeDriver (auto-detected)
+- `CHROME_BIN`: Path to Chrome/Chromium binary (auto-detected, used by Playwright)
 
 ## ⚠️ Disclaimer & Legal
 
@@ -314,16 +317,16 @@ The project includes `nixpacks.toml` for Railway deployment. Ensure Chrome depen
 
 If you see 401/403 errors:
 1. Click "Refresh Tokens" in the UI, or
-2. Run `python3 grab_selenium_service.py` manually
+2. Run `python3 grab_playwright_service.py` manually
 
-### Selenium Exit Code 127 (Deployment)
+### Playwright Browser Installation Issues
 
-Missing Chrome dependencies. Ensure your deployment includes:
-- Chromium/Chrome binary
-- ChromeDriver
-- Required system libraries (libnss3, libgconf-2-4, etc.)
+If Playwright fails to launch:
+1. Ensure Playwright browsers are installed: `playwright install chromium`
+2. For deployment, ensure `playwright install chromium` is run during build
+3. Check that required system libraries are installed (see `Dockerfile` or `nixpacks.toml`)
 
-See `Dockerfile` or `nixpacks.toml` for required packages.
+See `Dockerfile` or `nixpacks.toml` for required packages and build commands.
 
 ### No Results Returned
 
