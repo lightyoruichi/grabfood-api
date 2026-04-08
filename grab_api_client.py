@@ -248,6 +248,128 @@ class GrabFoodClient:
             logger.exception(f"API Error: {e}")
             return []
 
+    def get_restaurant_menu(self, restaurant_id, latlng="3.139,101.6869"):
+        """
+        Fetch menu items for a specific restaurant.
+        
+        Args:
+            restaurant_id: The restaurant ID (e.g., "1-C6D3VKNKTTW3JX")
+            latlng: Location coordinates (default: "3.139,101.6869")
+            
+        Returns:
+            Dictionary with restaurant info and menu items
+        """
+        self._rate_limit()
+        
+        target_url = f"https://portal.grab.com/foodweb/guest/v2/merchants/{restaurant_id}"
+        
+        params = {
+            "latlng": latlng,
+        }
+        
+        headers = self.headers.copy()
+        
+        logger.info(f"Fetching menu for restaurant: {restaurant_id}")
+        
+        try:
+            response = requests.get(target_url, headers=headers, params=params, timeout=15)
+            logger.info(f"Menu Response Status: {response.status_code}")
+            
+            if self._is_token_expired(response):
+                logger.warning("Token expired, attempting refresh...")
+                if self.refresh_tokens():
+                    self._rate_limit()
+                    headers = self.headers.copy()
+                    response = requests.get(target_url, headers=headers, params=params, timeout=15)
+                    logger.info(f"Menu Retry Response Status: {response.status_code}")
+                else:
+                    logger.error("Token refresh failed")
+                    return None
+            
+            if response.status_code != 200:
+                logger.error(f"Menu fetch error: {response.status_code} - {response.text[:500]}")
+                return None
+            
+            data = response.json()
+            logger.info(f"Menu response keys: {list(data.keys())}")
+            if "merchant" in data:
+                logger.info(f"Merchant keys: {list(data.get('merchant', {}).keys())}")
+                logger.info(f"Categories: {data.get('merchant', {}).get('categories', []).__len__()}")
+            
+            return self._parse_menu_data(data, restaurant_id)
+            
+        except Exception as e:
+            logger.exception(f"Menu API Error: {e}")
+            return None
+
+    def _parse_menu_data(self, data, restaurant_id):
+        """Parse the menu response into a structured format"""
+        result = {
+            "restaurant_id": restaurant_id,
+            "name": "",
+            "categories": [],
+            "items": []
+        }
+        
+        try:
+            merchant = data.get("merchant", {})
+            result["name"] = merchant.get("name", "Unknown Restaurant")
+            
+            menu = merchant.get("menu", {})
+            categories = menu.get("categories", [])
+            for category in categories:
+                category_name = category.get("name", "Other")
+                items = category.get("items", [])
+                
+                category_obj = {
+                    "name": category_name,
+                    "items": []
+                }
+                
+                for item in items:
+                    price = item.get("priceInMinorUnit", 0)
+                    item_data = {
+                        "id": item.get("ID", ""),
+                        "name": item.get("name", ""),
+                        "description": item.get("description", ""),
+                        "price": price / 100 if price else 0,
+                        "currency": "MYR",
+                        "image": item.get("imgHref", ""),
+                        "is_available": item.get("available", True),
+                        "modifier_groups": []
+                    }
+                    
+                    for mg in item.get("modifierGroups", []):
+                        mg_data = {
+                            "id": mg.get("ID", ""),
+                            "name": mg.get("name", ""),
+                            "selection_min": mg.get("selectionRangeMin", 1),
+                            "selection_max": mg.get("selectionRangeMax", 1),
+                            "modifiers": []
+                        }
+                        
+                        for mod in mg.get("modifiers", []):
+                            mod_price = mod.get("priceInMinorUnit", 0)
+                            mod_data = {
+                                "id": mod.get("ID", ""),
+                                "name": mod.get("name", ""),
+                                "price": mod_price / 100 if mod_price else 0,
+                                "available": mod.get("available", True)
+                            }
+                            mg_data["modifiers"].append(mod_data)
+                        
+                        item_data["modifier_groups"].append(mg_data)
+                    
+                    category_obj["items"].append(item_data)
+                    result["items"].append(item_data)
+                
+                result["categories"].append(category_obj)
+                
+        except Exception as e:
+            logger.exception(f"Failed to parse menu data: {e}")
+        
+        return result
+
 if __name__ == "__main__":
     # Test Block
     client = GrabFoodClient()
