@@ -129,7 +129,17 @@ def refresh_token():
         return jsonify({
             "error": "Token refresh failed",
             "message": str(e)
-        }), 500
+            }), 500
+
+def slugify(text):
+    import re
+    text = text.lower()
+    text = re.sub(r'[^a-z0-9\s-]', '', text)
+    text = re.sub(r'[\s-]+', '-', text)
+    text = text.strip('-')
+    if not text.endswith('-delivery'):
+        text += '-delivery'
+    return text
 
 @app.route('/api/restaurants', methods=['GET'])
 def get_restaurants():
@@ -224,19 +234,36 @@ def get_restaurants():
             "message": str(e)
         }), 500
 
-def slugify(text):
-    import re
-    text = text.lower()
-    # Replace non-alphanumeric (except dashes and spaces) with nothing
-    text = re.sub(r'[^a-z0-9\s-]', '', text)
-    # Replace whitespace and dashes with a single dash
-    text = re.sub(r'[\s-]+', '-', text)
-    # Strip leading/trailing dashes
-    text = text.strip('-')
-    # Append -delivery if not present (simple heuristic based on user feedback)
-    if not text.endswith('-delivery'):
-        text += '-delivery'
-    return text
+@app.route('/api/menu', methods=['GET'])
+def get_menu():
+    """
+    Get menu for a specific restaurant.
+    
+    Query parameters:
+        restaurant_id (required): The restaurant ID (e.g., "1-C6D3VKNKTTW3JX")
+    """
+    restaurant_id = request.args.get('restaurant_id')
+    
+    if not restaurant_id:
+        return jsonify({"error": "Missing restaurant_id parameter"}), 400
+    
+    try:
+        menu_data = client.get_restaurant_menu(restaurant_id)
+        
+        if menu_data is None:
+            return jsonify({
+                "error": "Failed to fetch menu",
+                "message": "Either restaurant not found or tokens expired"
+            }), 500
+        
+        return jsonify(menu_data)
+        
+    except Exception as e:
+        logger.error(f"Menu fetch failed: {e}", exc_info=True)
+        return jsonify({
+            "error": "Internal server error",
+            "message": str(e)
+        }), 500
 
 if __name__ == '__main__':
     print("Starting GrabFood API Server on port 5001...")
