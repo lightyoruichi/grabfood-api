@@ -7,6 +7,7 @@
     <title>GrabFood API - Developer Interface</title>
 
     <!-- Leaflet CSS -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍔</text></svg>">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
@@ -588,26 +589,28 @@
 
         function testAPI() {
             switchTab('api');
-            if (selectedLat && selectedLng) {
-                document.getElementById('api-params').value = JSON.stringify({
-                    lat: selectedLat,
-                    lng: selectedLng,
-                    keyword: document.getElementById('search-input').value || 'food'
-                }, null, 2);
-            }
+            const lat = selectedLat || 3.140853;
+            const lng = selectedLng || 101.693207;
+            document.getElementById('api-params').value = JSON.stringify({
+                lat: lat,
+                lng: lng,
+                keyword: document.getElementById('search-input').value || 'food'
+            }, null, 2);
         }
 
         async function executeAPITest() {
             const endpoint = document.getElementById('api-endpoint').value;
-            const paramsText = document.getElementById('api-params').value;
+            const paramsText = document.getElementById('api-params').value.trim();
             const responseDiv = document.getElementById('api-response');
             
             let params = {};
-            try {
-                params = JSON.parse(paramsText);
-            } catch (e) {
-                alert("Invalid JSON in parameters");
-                return;
+            if (paramsText) {
+                try {
+                    params = JSON.parse(paramsText);
+                } catch (e) {
+                    alert("Invalid JSON in parameters");
+                    return;
+                }
             }
 
             const startTime = Date.now();
