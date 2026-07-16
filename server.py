@@ -76,6 +76,11 @@ def home():
         return send_file(file_path)
     return "index.html not found", 404
 
+@app.route('/favicon.ico')
+def favicon():
+    """Serve favicon requests with no content to prevent console 404 errors"""
+    return '', 204
+
 def update_tokens_background(lat, lng):
     """
     Helper to run Playwright in background if needed.
