@@ -21,8 +21,8 @@ class GrabPlaywrightService:
         self.context = None
         self.page = None
 
-    def _setup_browser(self):
-        """Initialize Playwright browser with anti-detection settings"""
+    def _setup_browser(self, lat=3.1390, lng=101.6869):
+        """Initialize Playwright browser with anti-detection settings and geolocation"""
         self.playwright = sync_playwright().start()
         
         # Browser launch options
@@ -41,16 +41,20 @@ class GrabPlaywrightService:
         if chrome_bin:
             logger.info(f"Using Chrome Binary: {chrome_bin}")
             launch_options["executable_path"] = chrome_bin
+        else:
+            logger.info("Using system Google Chrome channel")
+            launch_options["channel"] = "chrome"
         
         # Launch browser
         self.browser = self.playwright.chromium.launch(**launch_options)
         
-        # Create context with anti-detection settings
+        # Create context with anti-detection settings and geolocation
         self.context = self.browser.new_context(
             viewport={"width": 1920, "height": 1080},
-            user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             locale="en-US",
             timezone_id="Asia/Kuala_Lumpur",
+            geolocation={"latitude": float(lat), "longitude": float(lng)},
+            permissions=["geolocation"],
             # Disable automation indicators
             java_script_enabled=True,
             accept_downloads=False,
@@ -76,7 +80,27 @@ class GrabPlaywrightService:
         Returns a dictionary of headers and cookies suitable for use with requests.
         """
         if not self.page:
-            self._setup_browser()
+            self._setup_browser(lat, lng)
+            
+        # Inject location cookies to bypass location detection WAF wall
+        try:
+            self.context.add_cookies([
+                {
+                    "name": "gfc-country",
+                    "value": country_code,
+                    "domain": ".grab.com",
+                    "path": "/"
+                },
+                {
+                    "name": "gfc-latlng",
+                    "value": f"{lat},{lng}",
+                    "domain": ".grab.com",
+                    "path": "/"
+                }
+            ])
+            logger.info(f"Injected Grab location cookies: country={country_code}, latlng={lat},{lng}")
+        except Exception as cookie_err:
+            logger.error(f"Failed to inject location cookies: {cookie_err}")
         
         auth_context = {}
         captured_headers = {}
@@ -87,6 +111,7 @@ class GrabPlaywrightService:
             # Set up request and response interception
             def handle_request(request):
                 """Capture requests to portal.grab.com"""
+                print(f"Playwright Request: {request.url}", flush=True)
                 if "portal.grab.com" in request.url:
                     logger.info(f"Inspecting request: {request.url}")
                     # Get all headers
@@ -99,8 +124,8 @@ class GrabPlaywrightService:
                     for k, v in headers.items():
                         captured_headers[k] = v
                     
-                    # Check for recaptcha token
-                    token_key = next((k for k in headers.keys() if 'x-recaptcha-token' in k.lower()), None)
+                    # Check for recaptcha token or hydra jwt
+                    token_key = next((k for k in headers.keys() if 'x-recaptcha-token' in k.lower() or 'x-hydra-jwt' in k.lower()), None)
                     if token_key:
                         logger.info(f"Found explicit token in {token_key}!")
                         nonlocal found_token
@@ -108,6 +133,7 @@ class GrabPlaywrightService:
             
             def handle_response(response):
                 """Capture responses from portal.grab.com"""
+                print(f"Playwright Response: {response.url} ({response.status})", flush=True)
                 if "portal.grab.com" in response.url:
                     logger.info(f"Inspecting response: {response.url}")
                     # Response headers might also contain useful info
@@ -124,12 +150,17 @@ class GrabPlaywrightService:
             logger.info(f"Navigating to {url}...")
             self.page.goto(url, wait_until="networkidle", timeout=30000)
             
-            # Wait a bit for initial requests
-            time.sleep(5)
+            # Wait a bit for initial requests (React rendering and API calls take time)
+            logger.info("Waiting for background API requests to settle...")
+            for _ in range(15):
+                if found_token:
+                    logger.info("Found token in background requests during navigation settle wait.")
+                    break
+                time.sleep(1)
             
             # Check if we already captured the token
             if not found_token:
-                found_token = any('x-recaptcha-token' in k.lower() for k in captured_headers.keys())
+                found_token = any(k in ['x-recaptcha-token', 'x-hydra-jwt'] for k in [key.lower() for key in captured_headers.keys()])
             
             if not found_token:
                 logger.warning("Token not found in initial requests. Attempting to force search...")
@@ -227,8 +258,8 @@ class GrabPlaywrightService:
                     # Wait for results
                     time.sleep(5)
                     
-                    # Check again
-                    found_token = any('x-recaptcha-token' in k.lower() for k in captured_headers.keys())
+                     # Check again
+                    found_token = any(k in ['x-recaptcha-token', 'x-hydra-jwt'] for k in [key.lower() for key in captured_headers.keys()])
                     
                 except Exception as ex:
                     logger.error(f"Failed to force search interaction: {ex}")
@@ -248,6 +279,20 @@ class GrabPlaywrightService:
             # Build auth context
             auth_context['headers'] = captured_headers
             auth_context['cookies'] = captured_cookies
+            
+            # Save to grab_auth_context.json directly
+            if captured_headers:
+                try:
+                    with open("grab_auth_context.json", "w") as f:
+                        data = {
+                            "headers": {k: v for k, v in captured_headers.items() 
+                                       if k.lower() not in ['content-length', 'content-encoding']},
+                            "cookies": captured_cookies
+                        }
+                        json.dump(data, f, indent=2)
+                    logger.info("Saved auth context to grab_auth_context.json")
+                except Exception as file_err:
+                    logger.error(f"Failed to write grab_auth_context.json: {file_err}")
                 
         except Exception as e:
             logger.error(f"Error getting auth context: {e}")
