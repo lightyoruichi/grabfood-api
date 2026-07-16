@@ -157,7 +157,7 @@ class GrabPlaywrightService:
                         try:
                             address_input.click(timeout=5000)
                         except:
-                            self.page.evaluate("arguments[0].click();", address_input)
+                            address_input.evaluate("el => el.click()")
                         
                         address_input.fill("Kuala Lumpur")
                         time.sleep(1)
