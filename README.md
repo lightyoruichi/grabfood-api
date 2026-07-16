@@ -103,35 +103,47 @@ curl -X POST "http://localhost:5001/api/refresh-token" \
 - Python 3.11+
 - Playwright browsers (installed automatically via `playwright install chromium`)
 
-### Setup
+### Setup & Running Locally (Quick Start)
 
-1. **Clone the repository**:
+To deploy and run the GrabFood API wrapper locally on your machine, follow these steps:
+
+1. **Clone the Repository**:
    ```bash
    git clone https://github.com/lightyoruichi/grabfood-api.git
    cd grabfood-api
    ```
-   
-   Or using SSH:
+
+2. **Create a Virtual Environment (Recommended)**:
    ```bash
-   git clone git@github.com:lightyoruichi/grabfood-api.git
-   cd grabfood-api
+   python3 -m venv .venv
+   source .venv/bin/activate  # On Windows, use `.venv\Scripts\activate`
    ```
 
-2. **Install Dependencies**:
+3. **Install Dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Install Playwright Browsers**:
+4. **Install Playwright Chromium Browser**:
    ```bash
    playwright install chromium
    ```
 
-4. **Initial Token Capture** (Optional - tokens refresh automatically):
+5. **Run the Flask Development Server**:
    ```bash
-   python3 grab_playwright_service.py
+   python3 server.py
    ```
-   This generates `grab_auth_context.json` with authentication tokens.
+
+The server will start on `http://127.0.0.1:5001`. Open this address in your browser to access the Developer Interface!
+
+---
+
+### Initial Token Capture (Optional)
+If you want to verify token capture manually before launching the server, you can execute:
+```bash
+python3 grab_playwright_service.py
+```
+This will launch the browser context (using Google Chrome to bypass WAF locally) and generate `grab_auth_context.json` immediately.
 
 ## 🏃 Usage
 
